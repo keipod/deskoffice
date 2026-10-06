@@ -40,22 +40,39 @@ if [[ ! -e "$ENV_FILE" ]]; then
   (umask 077; set -o noclobber; printf 'JWT_SECRET=%s\n' "$jwt_secret" > "$ENV_FILE")
   unset jwt_secret
 fi
-compose=(docker compose -p deskoffice --env-file "$ENV_FILE" -f "$REPO_ROOT/docker/docker-compose.local.yml")
+HERMES_ENV_FILE="$REPO_ROOT/.env.hermes"
+if [[ ! -e "$HERMES_ENV_FILE" ]]; then
+  gateway_secret="$(openssl rand -hex 32)"
+  (umask 077; set -o noclobber; printf 'HERMES_API_KEY=%s\n' "$gateway_secret" > "$HERMES_ENV_FILE")
+  unset gateway_secret
+fi
+compose=(docker compose -p deskoffice --env-file "$ENV_FILE" --env-file "$HERMES_ENV_FILE" -f "$REPO_ROOT/docker/docker-compose.local.yml")
 ready_timeout="${DESKOFFICE_READY_TIMEOUT:-120}"
 if [[ ! "$ready_timeout" =~ ^[0-9]+$ ]]; then
   printf 'DESKOFFICE_READY_TIMEOUT은 0 이상의 정수여야 합니다.\n' >&2
   exit 1
 fi
 
-"${compose[@]}" up -d deskrpg-app
+"${compose[@]}" up -d deskrpg-app hermes
 printf 'DeskOffice 접속 확인 중...\n'
 deadline=$((SECONDS + ready_timeout))
 while :; do
   health="$(curl --fail --silent --max-time 3 http://127.0.0.1:17770/api/health || true)"
   if [[ "$health" =~ \"status\"[[:space:]]*:[[:space:]]*\"ok\" && "$health" =~ \"db\"[[:space:]]*:[[:space:]]*\"connected\" ]]; then
     page="$(curl --fail --silent --location --max-time 3 http://127.0.0.1:17770/ || true)"
-    if [[ "$page" == *'<html'* || "$page" == *'<!DOCTYPE html'* ]]; then
-      printf 'DeskOffice 시작됨: http://localhost:17770 (0.0.0.0에서 서빙)\n종료: ./down.sh\n'
+    if [[ "$page" == *'<html'* || "$page" == *'<!DOCTYPE html'* ]] && "${compose[@]}" exec -T hermes python -c '
+import json, os, urllib.request
+headers = {"Authorization": "Bearer " + os.environ["API_SERVER_KEY"]}
+def probe(path):
+    request = urllib.request.Request("http://127.0.0.1:17772" + path, headers=headers)
+    with urllib.request.urlopen(request, timeout=3) as response:
+        return json.load(response)
+capabilities = probe("/v1/capabilities")
+plugin = probe("/deskrpg/info")
+assert capabilities.get("auth", {}).get("required") is True
+assert plugin.get("plugin") == "deskrpg" and plugin.get("version")
+' >/dev/null 2>&1; then
+      printf 'DeskOffice 시작됨: http://localhost:17770 (0.0.0.0에서 서빙)\nHermes 게이트웨이: http://localhost:17772\n종료: ./down.sh\n'
       exit 0
     fi
   fi
@@ -64,5 +81,5 @@ while :; do
   fi
   sleep 2
 done
-printf '접속 확인 시간이 초과되었습니다. ./down.sh로 종료한 뒤 Docker 상태를 확인하세요.\n' >&2
+printf 'DeskOffice/Hermes 접속 확인 시간이 초과되었습니다. ./down.sh로 종료한 뒤 Docker 상태를 확인하세요.\n' >&2
 exit 1

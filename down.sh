@@ -21,6 +21,9 @@ compose=(docker compose -p deskoffice)
 if [[ -f "$REPO_ROOT/.env.lite" ]]; then
   compose+=(--env-file "$REPO_ROOT/.env.lite")
 fi
+if [[ -f "$REPO_ROOT/.env.hermes" ]]; then
+  compose+=(--env-file "$REPO_ROOT/.env.hermes")
+fi
 compose+=(-f "$REPO_ROOT/docker/docker-compose.local.yml")
-"${compose[@]}" stop --timeout 30 deskrpg-app
+"${compose[@]}" stop --timeout 30 deskrpg-app hermes hermes-setup plugin-pin
 printf 'DeskOffice 종료됨. 데이터는 보존됩니다.\n'

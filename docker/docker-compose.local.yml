@@ -3,6 +3,8 @@ services:
   deskrpg-app:
     image: ${DESKRPG_IMAGE:-ghcr.io/dandacompany/deskrpg:latest}
     restart: unless-stopped
+    depends_on:
+      - hermes
     ports:
       - "0.0.0.0:17770:17770"
       - "0.0.0.0:17771:17771"
@@ -21,5 +23,87 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  plugin-pin:
+    image: ${DESKRPG_IMAGE:-ghcr.io/dandacompany/deskrpg:latest}
+    restart: "no"
+    user: root
+    entrypoint: ["node", "-e"]
+    environment:
+      API_SERVER_KEY: ${HERMES_API_KEY:?run ./up.sh to create the gateway key}
+      HERMES_MODEL_BASE_URL: ${HERMES_MODEL_BASE_URL:-http://host.docker.internal:11434/v1}
+      HERMES_MODEL: ${HERMES_MODEL:-qwen3.6:35b}
+      HERMES_MODEL_CONTEXT: ${HERMES_MODEL_CONTEXT:-65536}
+    command:
+      - |
+        const fs = require('fs');
+        const source = fs.readFileSync('src/lib/hermes/setup/pin.ts', 'utf8');
+        const pin = source.match(/export const PLUGIN_PIN = "([0-9a-f]{40})"/);
+        if (!pin) throw new Error('DeskRPG plugin pin missing');
+        fs.writeFileSync('/pin/ref', pin[1]);
+        // Seed before the Hermes entrypoint can create its remote-provider defaults.
+        const config = '/opt/data/config.yaml';
+        if (!fs.existsSync(config)) {
+          fs.writeFileSync(config, JSON.stringify({
+            model: {
+              default: process.env.HERMES_MODEL,
+              provider: 'custom',
+              base_url: process.env.HERMES_MODEL_BASE_URL,
+              context_length: Number(process.env.HERMES_MODEL_CONTEXT),
+              ollama_num_ctx: Number(process.env.HERMES_MODEL_CONTEXT)
+            },
+            gateway: {multiplex_profiles: true}
+          }), {mode: 0o600});
+        }
+        const env = '/opt/data/.env';
+        if (!fs.existsSync(env)) {
+          fs.writeFileSync(env,
+            'API_SERVER_KEY=' + process.env.API_SERVER_KEY + '\n' +
+            'OPENAI_API_KEY=local\nOPENAI_BASE_URL=' + process.env.HERMES_MODEL_BASE_URL + '\n',
+            {mode: 0o600});
+        }
+    volumes:
+      - plugin-pin:/pin
+      - hermes-data:/opt/data
+
+  hermes-setup:
+    image: ${HERMES_IMAGE:-nousresearch/hermes-agent:latest}
+    restart: "no"
+    depends_on:
+      plugin-pin:
+        condition: service_completed_successfully
+    environment:
+      API_SERVER_KEY: ${HERMES_API_KEY:?run ./up.sh to create the gateway key}
+    command: ["sh", "/opt/deskoffice/hermes-init.sh"]
+    volumes:
+      - hermes-data:/opt/data
+      - plugin-pin:/pin:ro
+      - ./hermes-init.sh:/opt/deskoffice/hermes-init.sh:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  hermes:
+    image: ${HERMES_IMAGE:-nousresearch/hermes-agent:latest}
+    restart: unless-stopped
+    depends_on:
+      hermes-setup:
+        condition: service_completed_successfully
+      plugin-pin:
+        condition: service_completed_successfully
+        restart: true
+    command: ["gateway", "run"]
+    ports:
+      - "0.0.0.0:17772:17772"
+    environment:
+      API_SERVER_ENABLED: "true"
+      API_SERVER_HOST: 0.0.0.0
+      API_SERVER_PORT: "17772"
+      API_SERVER_KEY: ${HERMES_API_KEY:?run ./up.sh to create the gateway key}
+    volumes:
+      - hermes-data:/opt/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
 volumes:
   deskrpg-data:
+  hermes-data:
+  plugin-pin:

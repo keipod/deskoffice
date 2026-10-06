@@ -68,6 +68,9 @@ elif name == 'docker':
         sys.exit(1)
     elif args[:2] == ['compose', 'version']:
         sys.stdout.write('Docker Compose version v2.0.0\\n')
+    elif args and args[0] == 'compose' and 'exec' in args:
+        if os.environ.get('FAKE_GATEWAY_FAIL') == '1':
+            sys.exit(1)
     elif args and args[0] == 'inspect':
         sys.stdout.write('true\\n')
     elif args and args[0] == 'compose' and 'ps' in args and ('-q' in args or '--quiet' in args):
@@ -119,27 +122,34 @@ elif name == 'docker':
         """명시된 프로젝트와 저장소의 설정 파일이 사용되는지 확인한다."""
         for flag, expected in (
             ("-p", "deskoffice"),
-            ("--env-file", str(self.repo / ".env.lite")),
             ("-f", str(self.repo / "docker/docker-compose.local.yml")),
         ):
             self.assertIn(flag, call)
             self.assertEqual(call[call.index(flag) + 1], expected)
+        env_files = [call[i + 1] for i, arg in enumerate(call) if arg == "--env-file"]
+        self.assertEqual(env_files, [
+            str(self.repo / ".env.lite"),
+            str(self.repo / ".env.hermes"),
+        ])
 
     def test_up_help_has_no_side_effects(self) -> None:
         self.assert_success(self.run_script("up.sh", "--help"))
         self.assertEqual(self.calls(), [])
         self.assertFalse((self.repo / ".env.lite").exists())
+        self.assertFalse((self.repo / ".env.hermes").exists())
 
     def test_down_help_has_no_side_effects(self) -> None:
         self.assert_success(self.run_script("down.sh", "--help"))
         self.assertEqual(self.calls(), [])
         self.assertFalse((self.repo / ".env.lite").exists())
+        self.assertFalse((self.repo / ".env.hermes").exists())
 
     def test_invalid_argument_is_rejected_before_mutation(self) -> None:
         result = self.run_script("up.sh", "--not-supported")
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(self.calls(), [])
         self.assertFalse((self.repo / ".env.lite").exists())
+        self.assertFalse((self.repo / ".env.hermes").exists())
 
     def test_up_creates_private_environment_and_uses_own_configuration(self) -> None:
         self.assert_success(self.run_script("up.sh"))
@@ -151,19 +161,56 @@ elif name == 'docker':
         self.assert_compose_scope(up_calls[0])
         self.assertIn("-d", up_calls[0])
         self.assertIn("deskrpg-app", up_calls[0])
+        self.assertEqual(up_calls[0][-4:], ["up", "-d", "deskrpg-app", "hermes"])
         self.assertTrue(any(call[0] == "curl" for call in self.calls()))
+        gateway_checks = self.compose_calls("exec")
+        self.assertEqual(len(gateway_checks), 1)
+        self.assert_compose_scope(gateway_checks[0])
+        self.assertIn("hermes", gateway_checks[0])
+
+    def test_new_gateway_key_is_private_and_survives_repeated_up(self) -> None:
+        self.assert_success(self.run_script("up.sh"))
+        env_file = self.repo / ".env.hermes"
+        original = env_file.read_text(encoding="utf-8")
+        self.assertIn("HERMES_API_KEY=" + "1" * 64, original)
+        self.assertEqual(stat.S_IMODE(env_file.stat().st_mode), 0o600)
+        self.assert_success(self.run_script("up.sh"))
+        self.assertEqual(env_file.read_text(encoding="utf-8"), original)
+        self.assertEqual(sum(call[0] == "openssl" for call in self.calls()), 2)
 
     def test_existing_environment_survives_repeated_up(self) -> None:
         env_file = self.repo / ".env.lite"
         original = "JWT_SECRET=already-configured\nCUSTOM_VALUE=보존\n"
         env_file.write_text(original, encoding="utf-8")
         env_file.chmod(0o640)
+        gateway_file = self.repo / ".env.hermes"
+        gateway_original = "HERMES_API_KEY=existing-gateway-key\nCUSTOM_GATEWAY=보존\n"
+        gateway_file.write_text(gateway_original, encoding="utf-8")
+        gateway_file.chmod(0o640)
         for _ in range(2):
             self.assert_success(self.run_script("up.sh"))
         self.assertEqual(env_file.read_text(encoding="utf-8"), original)
         self.assertEqual(stat.S_IMODE(env_file.stat().st_mode), 0o640)
+        self.assertEqual(gateway_file.read_text(encoding="utf-8"), gateway_original)
+        self.assertEqual(stat.S_IMODE(gateway_file.stat().st_mode), 0o640)
         self.assertFalse(any(call[0] == "openssl" for call in self.calls()))
         self.assertEqual(len(self.compose_calls("up")), 2)
+
+    def test_existing_lite_configuration_is_preserved_when_gateway_key_is_created(self) -> None:
+        env_file = self.repo / ".env.lite"
+        original = "JWT_SECRET=already-configured\nDESKRPG_IMAGE=custom-existing-image\n"
+        env_file.write_text(original, encoding="utf-8")
+        env_file.chmod(0o640)
+        self.assert_success(self.run_script("up.sh"))
+        self.assertEqual(env_file.read_text(encoding="utf-8"), original)
+        self.assertEqual(stat.S_IMODE(env_file.stat().st_mode), 0o640)
+        self.assertTrue((self.repo / ".env.hermes").is_file())
+        self.assertEqual(sum(call[0] == "openssl" for call in self.calls()), 1)
+
+    def test_gateway_failure_is_not_reported_as_ready(self) -> None:
+        self.environment["FAKE_GATEWAY_FAIL"] = "1"
+        self.assertNotEqual(self.run_script("up.sh").returncode, 0)
+        self.assertTrue(self.compose_calls("exec"))
 
     def test_readiness_and_connection_message_use_web_port_17770(self) -> None:
         result = self.run_script("up.sh")
@@ -177,6 +224,7 @@ elif name == 'docker':
             "http://127.0.0.1:17770/",
         ])
         self.assertIn("http://localhost:17770", result.stdout)
+        self.assertIn("http://localhost:17772", result.stdout)
 
     def test_readiness_failure_returns_nonzero(self) -> None:
         self.environment["FAKE_CURL_FAIL"] = "1"
@@ -204,12 +252,18 @@ elif name == 'docker':
         env_file = self.repo / ".env.lite"
         original = "JWT_SECRET=already-configured\n"
         env_file.write_text(original, encoding="utf-8")
+        gateway_file = self.repo / ".env.hermes"
+        gateway_original = "HERMES_API_KEY=existing-gateway-key\n"
+        gateway_file.write_text(gateway_original, encoding="utf-8")
         self.assert_success(self.run_script("down.sh"))
         stop_calls = self.compose_calls("stop")
         self.assertEqual(len(stop_calls), 1)
         self.assert_compose_scope(stop_calls[0])
-        self.assertEqual(stop_calls[0][-4:], ["stop", "--timeout", "30", "deskrpg-app"])
+        self.assertEqual(stop_calls[0][-7:], [
+            "stop", "--timeout", "30", "deskrpg-app", "hermes", "hermes-setup", "plugin-pin",
+        ])
         self.assertEqual(env_file.read_text(encoding="utf-8"), original)
+        self.assertEqual(gateway_file.read_text(encoding="utf-8"), gateway_original)
         for call in self.calls():
             self.assertFalse(set(call) & {"rm", "down", "prune", "kill", "--volumes", "-v"})
 
