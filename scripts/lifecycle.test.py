@@ -165,6 +165,19 @@ elif name == 'docker':
         self.assertFalse(any(call[0] == "openssl" for call in self.calls()))
         self.assertEqual(len(self.compose_calls("up")), 2)
 
+    def test_readiness_and_connection_message_use_web_port_17770(self) -> None:
+        result = self.run_script("up.sh")
+        self.assert_success(result)
+        urls = [
+            arg for call in self.calls() if call[0] == "curl"
+            for arg in call[1:] if arg.startswith("http://")
+        ]
+        self.assertEqual(urls, [
+            "http://127.0.0.1:17770/api/health",
+            "http://127.0.0.1:17770/",
+        ])
+        self.assertIn("http://localhost:17770", result.stdout)
+
     def test_readiness_failure_returns_nonzero(self) -> None:
         self.environment["FAKE_CURL_FAIL"] = "1"
         result = self.run_script("up.sh")
@@ -180,7 +193,7 @@ elif name == 'docker':
     def test_non_html_page_is_not_ready(self) -> None:
         self.environment["FAKE_NON_HTML_PAGE"] = "1"
         self.assertNotEqual(self.run_script("up.sh").returncode, 0)
-        self.assertTrue(any("http://127.0.0.1:3102/" in call for call in self.calls()))
+        self.assertTrue(any("http://127.0.0.1:17770/" in call for call in self.calls()))
 
     def test_down_cannot_claim_success_when_docker_is_unavailable(self) -> None:
         self.environment["FAKE_DOCKER_UNAVAILABLE"] = "1"

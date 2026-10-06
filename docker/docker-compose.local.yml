@@ -4,8 +4,8 @@ services:
     image: ${DESKRPG_IMAGE:-ghcr.io/dandacompany/deskrpg:latest}
     restart: unless-stopped
     ports:
-      - "127.0.0.1:3102:3000"
-      - "127.0.0.1:3103:3001"
+      - "0.0.0.0:17770:17770"
+      - "0.0.0.0:17771:17771"
     volumes:
       - ../public/assets:/app/public/assets
       - deskrpg-data:/app/data
@@ -16,6 +16,8 @@ services:
       JWT_SECRET: ${JWT_SECRET:-}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       INTERNAL_HOSTNAME: 0.0.0.0
+      HOSTNAME: 0.0.0.0
+      PORT: "17770"
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

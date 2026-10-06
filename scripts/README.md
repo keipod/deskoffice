@@ -3,7 +3,9 @@
 ## Local service
 
 From the repository root, run `./up.sh` to start DeskOffice at
-`http://localhost:3102`, and `./down.sh` to stop it while retaining data.
+`http://localhost:17770`, and `./down.sh` to stop it while retaining data.
+All interfaces (`0.0.0.0`) serve HTTP/API on port `17770` and Socket.IO on
+port `17771`; the remaining ports `17772–17779` are reserved.
 Docker Desktop is required. The launcher creates `.env.lite` only when missing,
 uses the isolated Compose project `deskoffice`, and checks database and HTTP
 readiness before reporting success. Existing configuration is preserved.

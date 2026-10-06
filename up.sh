@@ -3,7 +3,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 case "${1:-}" in
-  -h|--help) printf '사용법: ./up.sh — DeskOffice 시작 (http://localhost:3102)\n'; exit 0 ;;
+  -h|--help) printf '사용법: ./up.sh — DeskOffice 시작 (http://localhost:17770)\n'; exit 0 ;;
   '') ;;
   *) printf '지원하지 않는 인자: %s\n' "$1" >&2; exit 1 ;;
 esac
@@ -51,11 +51,11 @@ fi
 printf 'DeskOffice 접속 확인 중...\n'
 deadline=$((SECONDS + ready_timeout))
 while :; do
-  health="$(curl --fail --silent --max-time 3 http://127.0.0.1:3102/api/health || true)"
+  health="$(curl --fail --silent --max-time 3 http://127.0.0.1:17770/api/health || true)"
   if [[ "$health" =~ \"status\"[[:space:]]*:[[:space:]]*\"ok\" && "$health" =~ \"db\"[[:space:]]*:[[:space:]]*\"connected\" ]]; then
-    page="$(curl --fail --silent --location --max-time 3 http://127.0.0.1:3102/ || true)"
+    page="$(curl --fail --silent --location --max-time 3 http://127.0.0.1:17770/ || true)"
     if [[ "$page" == *'<html'* || "$page" == *'<!DOCTYPE html'* ]]; then
-      printf 'DeskOffice 시작됨: http://localhost:3102\n종료: ./down.sh\n'
+      printf 'DeskOffice 시작됨: http://localhost:17770 (0.0.0.0에서 서빙)\n종료: ./down.sh\n'
       exit 0
     fi
   fi
