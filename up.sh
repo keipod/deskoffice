@@ -12,7 +12,7 @@ if (( $# > 0 )); then
   exit 1
 fi
 
-for tool in docker curl openssl; do
+for tool in docker curl openssl python3; do
   command -v "$tool" >/dev/null || { printf '필요한 명령을 찾을 수 없습니다: %s\n' "$tool" >&2; exit 1; }
 done
 docker compose version >/dev/null
@@ -46,7 +46,8 @@ if [[ ! -e "$HERMES_ENV_FILE" ]]; then
   (umask 077; set -o noclobber; printf 'HERMES_API_KEY=%s\n' "$gateway_secret" > "$HERMES_ENV_FILE")
   unset gateway_secret
 fi
-compose=(docker compose -p deskoffice --env-file "$ENV_FILE" --env-file "$HERMES_ENV_FILE" -f "$REPO_ROOT/docker/docker-compose.local.yml")
+python3 "$REPO_ROOT/scripts/cli-provider-service.py" start
+compose=(docker compose -p deskoffice --env-file "$ENV_FILE" --env-file "$HERMES_ENV_FILE" --env-file "$REPO_ROOT/.env.cli" -f "$REPO_ROOT/docker/docker-compose.local.yml")
 ready_timeout="${DESKOFFICE_READY_TIMEOUT:-120}"
 if [[ ! "$ready_timeout" =~ ^[0-9]+$ ]]; then
   printf 'DESKOFFICE_READY_TIMEOUT은 0 이상의 정수여야 합니다.\n' >&2

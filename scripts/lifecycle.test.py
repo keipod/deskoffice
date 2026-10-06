@@ -50,6 +50,14 @@ with open(os.environ['FAKE_CLI_LOG'], 'a', encoding='utf-8') as log:
     log.write(json.dumps([name, *args]) + '\\n')
 if name == 'openssl':
     sys.stdout.write('1' * 64 + '\\n')
+elif name == 'python3':
+    if os.environ.get('FAKE_CONTROLLER_FAIL') == '1':
+        sys.exit(1)
+    if args[-1] == 'start':
+        key_file = Path(args[0]).parents[1] / '.env.cli'
+        if not key_file.exists():
+            key_file.write_text('DESKOFFICE_CLI_API_KEY=' + '2' * 64 + '\\n', encoding='utf-8')
+            key_file.chmod(0o600)
 elif name == 'curl':
     if os.environ.get('FAKE_CURL_FAIL') == '1':
         sys.exit(22)
@@ -78,7 +86,7 @@ elif name == 'docker':
     elif args and args[0] == 'compose' and 'ps' in args and '--format' in args:
         sys.stdout.write('{{"State":"running","Service":"deskrpg-app"}}\\n')
 """
-        for name in ("docker", "curl", "openssl", "open"):
+        for name in ("docker", "curl", "openssl", "open", "python3"):
             target = self.bin / name
             target.write_text(cli, encoding="utf-8")
             target.chmod(0o755)
@@ -130,6 +138,7 @@ elif name == 'docker':
         self.assertEqual(env_files, [
             str(self.repo / ".env.lite"),
             str(self.repo / ".env.hermes"),
+            str(self.repo / ".env.cli"),
         ])
 
     def test_up_help_has_no_side_effects(self) -> None:
@@ -137,12 +146,14 @@ elif name == 'docker':
         self.assertEqual(self.calls(), [])
         self.assertFalse((self.repo / ".env.lite").exists())
         self.assertFalse((self.repo / ".env.hermes").exists())
+        self.assertFalse((self.repo / ".env.cli").exists())
 
     def test_down_help_has_no_side_effects(self) -> None:
         self.assert_success(self.run_script("down.sh", "--help"))
         self.assertEqual(self.calls(), [])
         self.assertFalse((self.repo / ".env.lite").exists())
         self.assertFalse((self.repo / ".env.hermes").exists())
+        self.assertFalse((self.repo / ".env.cli").exists())
 
     def test_invalid_argument_is_rejected_before_mutation(self) -> None:
         result = self.run_script("up.sh", "--not-supported")
@@ -150,6 +161,7 @@ elif name == 'docker':
         self.assertEqual(self.calls(), [])
         self.assertFalse((self.repo / ".env.lite").exists())
         self.assertFalse((self.repo / ".env.hermes").exists())
+        self.assertFalse((self.repo / ".env.cli").exists())
 
     def test_up_creates_private_environment_and_uses_own_configuration(self) -> None:
         self.assert_success(self.run_script("up.sh"))
@@ -167,6 +179,9 @@ elif name == 'docker':
         self.assertEqual(len(gateway_checks), 1)
         self.assert_compose_scope(gateway_checks[0])
         self.assertIn("hermes", gateway_checks[0])
+        self.assertIn([
+            "python3", str(self.repo / "scripts/cli-provider-service.py"), "start",
+        ], self.calls())
 
     def test_new_gateway_key_is_private_and_survives_repeated_up(self) -> None:
         self.assert_success(self.run_script("up.sh"))
@@ -177,6 +192,22 @@ elif name == 'docker':
         self.assert_success(self.run_script("up.sh"))
         self.assertEqual(env_file.read_text(encoding="utf-8"), original)
         self.assertEqual(sum(call[0] == "openssl" for call in self.calls()), 2)
+
+    def test_cli_provider_configuration_is_private_and_preserved(self) -> None:
+        self.assert_success(self.run_script("up.sh"))
+        key_file = self.repo / ".env.cli"
+        self.assertEqual(stat.S_IMODE(key_file.stat().st_mode), 0o600)
+        original = "DESKOFFICE_CLI_API_KEY=existing-provider-key\nCUSTOM_CLI=보존\n"
+        key_file.write_text(original, encoding="utf-8")
+        key_file.chmod(0o640)
+        self.assert_success(self.run_script("up.sh"))
+        self.assertEqual(key_file.read_text(encoding="utf-8"), original)
+        self.assertEqual(stat.S_IMODE(key_file.stat().st_mode), 0o640)
+
+    def test_cli_provider_start_failure_prevents_compose_start(self) -> None:
+        self.environment["FAKE_CONTROLLER_FAIL"] = "1"
+        self.assertNotEqual(self.run_script("up.sh").returncode, 0)
+        self.assertEqual(self.compose_calls("up"), [])
 
     def test_existing_environment_survives_repeated_up(self) -> None:
         env_file = self.repo / ".env.lite"
@@ -255,6 +286,9 @@ elif name == 'docker':
         gateway_file = self.repo / ".env.hermes"
         gateway_original = "HERMES_API_KEY=existing-gateway-key\n"
         gateway_file.write_text(gateway_original, encoding="utf-8")
+        cli_file = self.repo / ".env.cli"
+        cli_original = "DESKOFFICE_CLI_API_KEY=existing-provider-key\n"
+        cli_file.write_text(cli_original, encoding="utf-8")
         self.assert_success(self.run_script("down.sh"))
         stop_calls = self.compose_calls("stop")
         self.assertEqual(len(stop_calls), 1)
@@ -264,6 +298,10 @@ elif name == 'docker':
         ])
         self.assertEqual(env_file.read_text(encoding="utf-8"), original)
         self.assertEqual(gateway_file.read_text(encoding="utf-8"), gateway_original)
+        self.assertEqual(cli_file.read_text(encoding="utf-8"), cli_original)
+        self.assertIn([
+            "python3", str(self.repo / "scripts/cli-provider-service.py"), "stop",
+        ], self.calls())
         for call in self.calls():
             self.assertFalse(set(call) & {"rm", "down", "prune", "kill", "--volumes", "-v"})
 

@@ -73,6 +73,7 @@ services:
         condition: service_completed_successfully
     environment:
       API_SERVER_KEY: ${HERMES_API_KEY:?run ./up.sh to create the gateway key}
+      DESKOFFICE_CLI_API_KEY: ${DESKOFFICE_CLI_API_KEY:?run ./up.sh to create the CLI provider key}
     command: ["sh", "/opt/deskoffice/hermes-init.sh"]
     volumes:
       - hermes-data:/opt/data
@@ -98,6 +99,7 @@ services:
       API_SERVER_HOST: 0.0.0.0
       API_SERVER_PORT: "17772"
       API_SERVER_KEY: ${HERMES_API_KEY:?run ./up.sh to create the gateway key}
+      DESKOFFICE_CLI_API_KEY: ${DESKOFFICE_CLI_API_KEY:?run ./up.sh to create the CLI provider key}
     volumes:
       - hermes-data:/opt/data
     extra_hosts:
