@@ -1104,6 +1104,11 @@ async function getSocketChannelParticipationAccess(channelId: string, userId: st
   return { channel, access };
 }
 
+/** The seam `npc:chat` calls through, so a test can stand in for a DB failure on this lookup. */
+export const channelParticipationAccess = {
+  get: getSocketChannelParticipationAccess,
+};
+
 async function isChannelOwner(channelId: string, userId: string): Promise<boolean> {
   const rows = await db
     .select({ ownerId: channels.ownerId })
@@ -1678,7 +1683,13 @@ export function setupSocketHandlers(io: Server) {
           return;
         }
 
-        const access = await getSocketChannelParticipationAccess(npcConfig._channelId, user.userId);
+        let access: Awaited<ReturnType<typeof getSocketChannelParticipationAccess>>;
+        try {
+          access = await channelParticipationAccess.get(npcConfig._channelId, user.userId);
+        } catch (err) {
+          console.error("[npc:chat] channel access lookup failed:", err);
+          access = null;
+        }
         const historyCharacterId = await resolveHistoryCharacterId(
           socket,
           user.userId,

@@ -1957,7 +1957,7 @@ const zh: Record<string, string> = {
   "game.npcChatDisconnected": "实时连接已断开，无法向 NPC 发送消息。连接恢复后请再发送一次。",
   "game.channelChatDisconnected": "实时连接已断开，无法发送聊天消息。连接恢复后请再发送一次。",
   "game.channelChatNotJoined": "连接已恢复并重新进入办公室，请再发送一次消息。",
-  // Room error codes (RoomErrorCode in src/server/room-socket.ts), 7 of them.
+  // Room error codes (RoomErrorCode in src/server/room-socket.ts), 8 of them.
   "game.room.error.forbidden": "你没有访问该房间的权限。",
   "game.room.error.not_found": "找不到该房间，已重新加载列表。",
   "game.room.error.not_open": "房间尚未打开，请重新进入。",
@@ -1965,6 +1965,7 @@ const zh: Record<string, string> = {
   "game.room.error.cooldown": "发送过快，请稍后再试。",
   "game.room.error.not_joined": "连接已恢复并重新加入，请再发送一次消息。",
   "game.room.error.invalid": "请求无效。",
+  "game.room.error.send_failed": "消息发送失败，请稍后再试。",
   // 聊天室（群聊）
   // Reasons an employee call is refused (pairs with the table in src/lib/npc-call-errors.ts)
   "game.npcCall.unknownNpc": "找不到该员工。请刷新页面后重试。",

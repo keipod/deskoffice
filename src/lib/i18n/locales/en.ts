@@ -2033,7 +2033,7 @@ const en: Record<string, string> = {
     "Cannot send chat while the real-time connection is down. Send again once it reconnects.",
   "game.channelChatNotJoined":
     "Reconnected and rejoined the office. Please send your message again.",
-  // Room error codes (RoomErrorCode in src/server/room-socket.ts), 7 of them.
+  // Room error codes (RoomErrorCode in src/server/room-socket.ts), 8 of them.
   "game.room.error.forbidden": "You don't have access to this room.",
   "game.room.error.not_found": "That room is gone. The list has been refreshed.",
   "game.room.error.not_open": "The room isn't open. Please enter it again.",
@@ -2041,6 +2041,7 @@ const en: Record<string, string> = {
   "game.room.error.cooldown": "Too fast — please wait a moment and send again.",
   "game.room.error.not_joined": "Reconnected and rejoined. Please send the message once more.",
   "game.room.error.invalid": "That request wasn't valid.",
+  "game.room.error.send_failed": "Couldn't send the message. Please try again in a moment.",
   // Chat rooms (group chat)
   // Reasons an employee call is refused (pairs with the table in src/lib/npc-call-errors.ts)
   "game.npcCall.unknownNpc": "That employee is no longer here. Refresh the page and try again.",

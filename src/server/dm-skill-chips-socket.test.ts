@@ -8,7 +8,7 @@ import { db, characters, npcs } from "@/db";
 import { DEV_JWT_SECRET } from "@/lib/dev-constants";
 import type { ChatResponse } from "@/lib/chat-response";
 import type { AdapterExecuteOptions } from "@/lib/adapters/types";
-import { adapterRegistry, setupSocketHandlers } from "./socket-handlers";
+import { adapterRegistry, channelParticipationAccess, setupSocketHandlers } from "./socket-handlers";
 import { skillExpansion, type SkillExpansionInput } from "./skill-expansion";
 
 test("a DM with skill chips stores the chip line and sends Hermes the expanded message; a failed expansion never reaches Hermes", async (t) => {
@@ -168,4 +168,66 @@ test("a DM with skill chips stores the chip line and sends Hermes the expanded m
   // An empty message without chips is dropped as before.
   await send({ sourceMessageId: "s8", message: "" });
   assert.equal((await history()).length, 5);
+});
+
+test("npc:chat whose channel-access lookup throws degrades to npc_not_found instead of crashing", async (t) => {
+  t.mock.timers.enable({ apis: ["setInterval"] });
+  t.mock.method(console, "error", () => {});
+  t.mock.method(channelParticipationAccess, "get", async () => {
+    throw new Error("boom: simulated transient DB failure");
+  });
+  const seed = await seedChannelWithProfiles({ placedActive: 1, displayName: "Sophie" });
+  const [character] = await db
+    .insert(characters)
+    .values({ userId: seed.userId, name: "Dante", appearance: "{}" })
+    .returning();
+  const npcId = seed.npcIds[0];
+
+  const events: [string, unknown][] = [];
+  const handlers = new Map<string, (payload: unknown) => Promise<void>>();
+  const token = await new SignJWT({ userId: seed.userId, nickname: "Dante" })
+    .setProtectedHeader({ alg: "HS256" })
+    .setExpirationTime("1h")
+    .sign(new TextEncoder().encode(process.env.JWT_SECRET || DEV_JWT_SECRET));
+  const socket = {
+    data: {} as Record<string, unknown>,
+    use: () => {},
+    id: "dm-skill-chips-throw-socket",
+    handshake: { headers: { cookie: `token=${token}` } },
+    on: (event: string, handler: (payload: unknown) => Promise<void>) => {
+      handlers.set(event, handler);
+    },
+    emit: (event: string, payload: unknown) => {
+      events.push([event, payload]);
+    },
+    join: () => {},
+    leave: () => {},
+    disconnect: () => {},
+  };
+  let connect!: (socket: unknown) => Promise<void>;
+  const io = {
+    on: (_event: string, handler: typeof connect) => {
+      connect = handler;
+    },
+    to: () => ({ emit: socket.emit }),
+    sockets: { sockets: new Map([[socket.id, socket]]) },
+  };
+  setupSocketHandlers(io as never);
+  await connect(socket);
+  socket.data.myCharacterId = character.id;
+
+  await handlers.get("npc:chat")!({
+    npcId,
+    characterId: character.id,
+    sourceMessageId: "s1",
+    message: "go",
+  });
+
+  const system = events
+    .filter(([name]) => name === "npc:response")
+    .map(([, p]) => p as { messageCode?: string; done: boolean })
+    .find((p) => p.done && p.messageCode);
+  assert.equal(system?.messageCode, "npc_not_found");
+  // Reaching this line at all is the proof: an unguarded throw here would have surfaced as an
+  // unhandled rejection and aborted the whole test process, not just this one assertion.
 });

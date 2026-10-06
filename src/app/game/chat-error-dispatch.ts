@@ -1,7 +1,7 @@
 import { ERROR_MESSAGE_KEYS } from "@/lib/i18n/error-codes";
 import { getNpcResponseMessageKey, isNpcResponseMessageCode } from "@/lib/npc-response-messages";
 
-/** The 7 room error codes with their own `game.room.error.*` wording (`RoomErrorCode` in `src/server/room-socket.ts`). */
+/** The 8 room error codes with their own `game.room.error.*` wording (`RoomErrorCode` in `src/server/room-socket.ts`). */
 const ROOM_ERROR_CODES = [
   "forbidden",
   "not_found",
@@ -10,6 +10,7 @@ const ROOM_ERROR_CODES = [
   "cooldown",
   "not_joined",
   "invalid",
+  "send_failed",
 ] as const;
 type RoomErrorCode = (typeof ROOM_ERROR_CODES)[number];
 

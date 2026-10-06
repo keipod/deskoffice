@@ -36,6 +36,9 @@ export type RoomErrorCode =
   | "cooldown"
   | "not_joined"
   | "invalid"
+  // The message was accepted and processed but could not be persisted (storage failure, not an
+  // access or input problem).
+  | "send_failed"
   // Skill chips: only one mentioned employee may receive them, and expansion can fail (skill-expansion.ts).
   | "skill_requires_single_mention"
   | SkillExpansionErrorCode;
@@ -307,7 +310,13 @@ export function registerRoomHandlers({ io, socket, deps }: RegisterRoomHandlersA
       const player = players.get(socket.id);
       if (!player) return fail(id, "not_joined");
 
-      const access = await resolveAccess(id);
+      let access: Awaited<ReturnType<typeof resolveAccess>>;
+      try {
+        access = await resolveAccess(id);
+      } catch (err) {
+        console.error("[room] access lookup failed:", err);
+        return fail(id, "not_found");
+      }
       if (!access.ok) return fail(id, access.code);
 
       if (!openRooms.has(id)) return fail(id, "not_open");
@@ -329,6 +338,9 @@ export function registerRoomHandlers({ io, socket, deps }: RegisterRoomHandlersA
           runtime = await getRuntime(io, access.room, user.userId);
         } catch (err) {
           console.error("[room] runtime unavailable:", err);
+          // Don't fall through to the mention-count check below — that would misreport this as
+          // "name exactly one employee" when the real cause is runtime assembly, not the mention.
+          return fail(id, "skill_load_failed");
         }
         const targets = runtime ? runtime.mentionedParticipants(content) : [];
         if (targets.length !== 1) return fail(id, "skill_requires_single_mention");
@@ -354,13 +366,19 @@ export function registerRoomHandlers({ io, socket, deps }: RegisterRoomHandlersA
       }
 
       const senderName = player.characterName || user.nickname;
-      const saved = await rooms.appendRoomMessage({
-        roomId: id,
-        senderKind: "user",
-        senderId: user.userId,
-        senderName,
-        content: stored,
-      });
+      let saved: Awaited<ReturnType<typeof rooms.appendRoomMessage>>;
+      try {
+        saved = await rooms.appendRoomMessage({
+          roomId: id,
+          senderKind: "user",
+          senderId: user.userId,
+          senderName,
+          content: stored,
+        });
+      } catch (err) {
+        console.error("[room] append message failed:", err);
+        return fail(id, "send_failed");
+      }
       broadcastRoomMessage(roomIo, id, saved);
       if (access.room.kind === "group") await announceActivity(id, saved);
 

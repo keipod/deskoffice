@@ -2045,7 +2045,7 @@ const ja: Record<string, string> = {
     "リアルタイム接続が切れているためチャットを送れません。接続が戻ったらもう一度送ってください。",
   "game.channelChatNotJoined":
     "接続が復旧しオフィスに再入場しました。メッセージをもう一度送ってください。",
-  // Room error codes (RoomErrorCode in src/server/room-socket.ts), 7 of them.
+  // Room error codes (RoomErrorCode in src/server/room-socket.ts), 8 of them.
   "game.room.error.forbidden": "このルームにアクセスする権限がありません。",
   "game.room.error.not_found": "ルームが見つかりません。一覧を読み込み直しました。",
   "game.room.error.not_open": "ルームが開いていません。もう一度入り直してください。",
@@ -2054,6 +2054,8 @@ const ja: Record<string, string> = {
   "game.room.error.not_joined":
     "接続が復旧し、再入室しました。メッセージをもう一度送ってください。",
   "game.room.error.invalid": "リクエストが正しくありません。",
+  "game.room.error.send_failed":
+    "メッセージを送信できませんでした。少し待ってからもう一度お試しください。",
   // チャットルーム（グループチャット）
   // Reasons an employee call is refused (pairs with the table in src/lib/npc-call-errors.ts)
   "game.npcCall.unknownNpc":

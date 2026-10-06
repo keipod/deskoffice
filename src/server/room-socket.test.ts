@@ -7,7 +7,7 @@ setupThrowawaySqlite("room-socket-test");
 import * as rooms from "@/lib/chat-rooms";
 import type { RoomSummary } from "@/lib/chat-rooms-policy";
 import { attachRoomReads } from "@/lib/conversation-reads";
-import { registerRoomHandlers } from "./room-socket";
+import { registerRoomHandlers, type RegisterRoomHandlersArgs } from "./room-socket";
 import type { SkillExpansion, SkillExpansionInput } from "./skill-expansion";
 
 type Emitted = [string, unknown];
@@ -61,11 +61,17 @@ function setup(
     userId?: string;
     cookie?: string;
     createRoom?: typeof rooms.createRoom;
+    /** Stands in for the room lookup `resolveAccess` makes. Default: the real `rooms.getRoom`. */
+    getRoom?: typeof rooms.getRoom;
+    /** Stands in for the storage call after a successful send. Default: the real `rooms.appendRoomMessage`. */
+    appendRoomMessage?: typeof rooms.appendRoomMessage;
     attachReads?: (userId: string, list: RoomSummary[]) => Promise<RoomSummary[]>;
     /** What the fake runtime reports as mentioned employees. Default: nobody. */
     mentions?: (text: string) => string[];
     /** Stands in for the plugin expansion. Default: refuses with skill_load_failed. */
     expandSkills?: (input: SkillExpansionInput) => Promise<SkillExpansion>;
+    /** Stands in for runtime assembly. Default: resolves to a working fake runtime (see below). */
+    getRuntime?: RegisterRoomHandlersArgs["deps"]["getRuntime"];
   } = {},
 ) {
   const emitted: Emitted[] = [];
@@ -114,34 +120,44 @@ function setup(
           lastChatTime: new Map(),
           cooldownMs: 2000,
           getParticipationAccess: async () => ({ access: { allowed: opts.allowed ?? true } }),
-          rooms: opts.createRoom ? { ...rooms, createRoom: opts.createRoom } : rooms,
+          rooms:
+            opts.createRoom || opts.getRoom || opts.appendRoomMessage
+              ? {
+                  ...rooms,
+                  ...(opts.createRoom ? { createRoom: opts.createRoom } : {}),
+                  ...(opts.getRoom ? { getRoom: opts.getRoom } : {}),
+                  ...(opts.appendRoomMessage ? { appendRoomMessage: opts.appendRoomMessage } : {}),
+                }
+              : rooms,
           expandSkills: async (input) => {
             expandCalls.push(input);
             return opts.expandSkills
               ? opts.expandSkills(input)
               : { ok: false, errorCode: "skill_load_failed" };
           },
-          getRuntime: async (_io, room) =>
-            ({
-              mentionedParticipants: (text: string) => opts.mentions?.(text) ?? [],
-              setExpandedMessage: (id: string, npcId: string, text: string) => {
-                expansions.push([id, npcId, text]);
-              },
-              handleHumanMessage: async (
-                _s: string,
-                text: string,
-                _socketId: string,
-                _sourceMessageId: string,
-                callerContext: unknown,
-                callerLocale: unknown,
-                callerUserId: unknown,
-              ) => {
-                woke.push({ roomId: room.id, text });
-                callerContexts.push(callerContext);
-                callerLocales.push(callerLocale);
-                callerUserIds.push(callerUserId);
-              },
-            }) as never,
+          getRuntime:
+            opts.getRuntime ??
+            (async (_io, room) =>
+              ({
+                mentionedParticipants: (text: string) => opts.mentions?.(text) ?? [],
+                setExpandedMessage: (id: string, npcId: string, text: string) => {
+                  expansions.push([id, npcId, text]);
+                },
+                handleHumanMessage: async (
+                  _s: string,
+                  text: string,
+                  _socketId: string,
+                  _sourceMessageId: string,
+                  callerContext: unknown,
+                  callerLocale: unknown,
+                  callerUserId: unknown,
+                ) => {
+                  woke.push({ roomId: room.id, text });
+                  callerContexts.push(callerContext);
+                  callerLocales.push(callerLocale);
+                  callerUserIds.push(callerUserId);
+                },
+              }) as never),
           invalidateRuntime: () => {},
           attachReads: opts.attachReads,
         },
@@ -733,6 +749,69 @@ test("room:send whose chips cannot be expanded is refused with the expansion cod
     code: "too_many_skills",
   });
   assert.equal(t.expandCalls.length, 1);
+});
+
+test("room:send with chips whose runtime assembly throws is refused with skill_load_failed, not skill_requires_single_mention", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const seeded = await seedChannelWithProfiles({ placedActive: 1 });
+  const scenario = setup({
+    getRuntime: async () => {
+      throw new Error("boom: simulated runtime assembly failure");
+    },
+    expandSkills: async () => ({ ok: true, message: "EXPANDED" }),
+  });
+  await scenario.register(seeded);
+  const office = await rooms.ensureOfficeRoom(seeded.channelId, seeded.userId);
+  await scenario.socket.trigger("room:open", { roomId: office.id });
+  await scenario.socket.trigger("room:send", {
+    roomId: office.id,
+    message: "@[소피] 봐줘",
+    skills: ["research"],
+  });
+  assert.deepEqual(ev(scenario.emitted, "room:error"), [
+    { roomId: office.id, code: "skill_load_failed" },
+  ]);
+  assert.deepEqual(scenario.expandCalls, []);
+  assert.deepEqual(scenario.woke, []);
+  assert.equal((await rooms.recentRoomMessages(office.id, 5, null)).length, 0);
+});
+
+test("room:send whose access lookup throws is refused with not_found, not a crash", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const seeded = await seedChannelWithProfiles({ placedActive: 1 });
+  // room:open must still see the real getRoom (it calls resolveAccess too) — only the lookup made
+  // by room:send itself should throw.
+  let failNext = false;
+  const scenario = setup({
+    getRoom: async (roomId: string) => {
+      if (failNext) throw new Error("boom: simulated DB failure");
+      return rooms.getRoom(roomId);
+    },
+  });
+  await scenario.register(seeded);
+  const office = await rooms.ensureOfficeRoom(seeded.channelId, seeded.userId);
+  await scenario.socket.trigger("room:open", { roomId: office.id });
+  failNext = true;
+  await scenario.socket.trigger("room:send", { roomId: office.id, message: "hi" });
+  assert.deepEqual(ev(scenario.emitted, "room:error"), [{ roomId: office.id, code: "not_found" }]);
+});
+
+test("room:send whose append-message call throws is refused with send_failed, not a crash", async (t) => {
+  t.mock.method(console, "error", () => {});
+  const seeded = await seedChannelWithProfiles({ placedActive: 1 });
+  const scenario = setup({
+    appendRoomMessage: async () => {
+      throw new Error("boom: simulated storage failure");
+    },
+  });
+  await scenario.register(seeded);
+  const office = await rooms.ensureOfficeRoom(seeded.channelId, seeded.userId);
+  await scenario.socket.trigger("room:open", { roomId: office.id });
+  await scenario.socket.trigger("room:send", { roomId: office.id, message: "hi" });
+  assert.deepEqual(ev(scenario.emitted, "room:error"), [
+    { roomId: office.id, code: "send_failed" },
+  ]);
+  assert.equal((await rooms.recentRoomMessages(office.id, 5, null)).length, 0);
 });
 
 test("room:send without chips is unchanged: no mention check, no expansion", async () => {
