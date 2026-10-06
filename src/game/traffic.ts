@@ -233,6 +233,17 @@ export class TrafficCoordinator {
     if (!state.route.length && (!shouldYield || this.canSearch(now))) {
       state.route = localRoute(position, goal, walkable, actors) ?? [];
     }
+    // Both sides can be mutually blocking a space too narrow for either escape route to
+    // find a detour (e.g. a one-tile corridor). Without this, they retry every 750ms forever.
+    // Break the tie deterministically: the lexicographically larger id backs away from the
+    // blocker to free the space, so the other side's next retry can get through.
+    if (!state.route.length && blocker && state.blockedRetries > 8 && id > blocker.id) {
+      const back = toward(position, blocker, -amount);
+      if (clearTraffic(position, back, walkable, actors)) {
+        state.blockedRetries = 0;
+        return back;
+      }
+    }
     const detour = toward(position, state.route[0] ?? position, amount);
     return clearTraffic(position, detour, walkable, actors) ? detour : position;
   }

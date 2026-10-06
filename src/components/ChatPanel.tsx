@@ -190,6 +190,13 @@ const MIN_WIDTH = 250;
 const MAX_WIDTH = 600;
 const DEFAULT_WIDTH = 320;
 
+function findLastIndex<T>(items: T[], predicate: (item: T) => boolean): number {
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (predicate(items[i])) return i;
+  }
+  return -1;
+}
+
 /** Is a modal layer floating above the chat panel? */
 function modalLayerOpen(): boolean {
   return document.querySelector('[aria-modal="true"], [data-modal-overlay]') !== null;
@@ -451,10 +458,12 @@ export default function ChatPanel({
     onChannelChatVisibleChange?.(channelChatVisible);
   }, [channelChatVisible, onChannelChatVisibleChange]);
 
-  // Auto-scroll NPC messages
+  // Auto-scroll NPC messages — only when already near the bottom, so scrolling up to read
+  // earlier messages is not interrupted by a streaming reply appending new chunks.
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const container = scrollRef.current;
+    if (container && container.scrollHeight - container.clientHeight - container.scrollTop <= 80) {
+      container.scrollTop = container.scrollHeight;
     }
   }, [npcMessages]);
   useEffect(() => {
@@ -619,10 +628,12 @@ export default function ChatPanel({
     [proposalResolved],
   );
 
-  // Auto-scroll channel messages
+  // Auto-scroll channel messages — only when already near the bottom, so scrolling up to
+  // read earlier messages is not interrupted by a new message arriving mid-read.
   useEffect(() => {
-    if (channelScrollRef.current) {
-      channelScrollRef.current.scrollTop = channelScrollRef.current.scrollHeight;
+    const container = channelScrollRef.current;
+    if (container && container.scrollHeight - container.clientHeight - container.scrollTop <= 80) {
+      container.scrollTop = container.scrollHeight;
     }
   }, [roomMessages]);
   useEffect(() => {
@@ -1008,7 +1019,12 @@ export default function ChatPanel({
                           }
                           continued={i > 0 && npcMessages[i - 1].role === msg.role}
                           streaming={
-                            msg.role === "npc" && isNpcStreaming && i === npcMessages.length - 1
+                            // The last message can be the player's own send sitting on top of a
+                            // still-streaming NPC reply — anchor to the last NPC message instead
+                            // of the last message overall, so the cursor does not vanish mid-stream.
+                            msg.role === "npc" &&
+                            isNpcStreaming &&
+                            i === findLastIndex(npcMessages, (m) => m.role === "npc")
                           }
                         >
                           {msg.role === "player"

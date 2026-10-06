@@ -133,6 +133,9 @@ export class NpcSmalltalk {
     for (const [id, line] of this.lines)
       if (now >= line.end || !available.has(id)) this.lines.delete(id);
     if (now < this.nextEncounter) return;
+    // Collect every eligible pair first, then pick uniformly at random — stopping at the
+    // first match found in array order would always favor whichever actors sort earliest.
+    const candidates: [SmalltalkActor, SmalltalkActor][] = [];
     for (let i = 0; i < actors.length; i++)
       for (let j = i + 1; j < actors.length; j++) {
         const a = actors[i],
@@ -149,28 +152,31 @@ export class NpcSmalltalk {
           !canSee(a, b)
         )
           continue;
-        // Select uniformly from all templates except the previous exchange.
-        let index = Math.floor(random() * (this.lineSet.length - (this.lastTemplate >= 0 ? 1 : 0)));
-        if (this.lastTemplate >= 0 && index >= this.lastTemplate) index++;
-        this.lastTemplate = index;
-        const name = (value: string) => value.split(/\s*[·|]\s*/)[0].trim();
-        this.lines.set(a.id, {
-          text: this.lineSet[index][0].replace("{name}", name(b.name)),
-          start: now,
-          end: now + 4500,
-        });
-        this.lines.set(b.id, {
-          text: this.lineSet[index][1].replace("{name}", name(a.name)),
-          start: now + 2000,
-          end: now + 6500,
-        });
-        this.encounters.set(a.id, { partner: b.id, until: now + SMALLTALK_PAUSE_MS });
-        this.encounters.set(b.id, { partner: a.id, until: now + SMALLTALK_PAUSE_MS });
-        this.cooldown.set(a.id, now + 45000);
-        this.cooldown.set(b.id, now + 45000);
-        this.pairs.set(key, now + 90000);
-        this.nextEncounter = now + 12000;
-        return;
+        candidates.push([a, b]);
       }
+    if (!candidates.length) return;
+    const [a, b] = candidates[Math.floor(random() * candidates.length)];
+    const key = JSON.stringify([a.id, b.id].sort());
+    // Select uniformly from all templates except the previous exchange.
+    let index = Math.floor(random() * (this.lineSet.length - (this.lastTemplate >= 0 ? 1 : 0)));
+    if (this.lastTemplate >= 0 && index >= this.lastTemplate) index++;
+    this.lastTemplate = index;
+    const name = (value: string) => value.split(/\s*[·|]\s*/)[0].trim();
+    this.lines.set(a.id, {
+      text: this.lineSet[index][0].replace("{name}", name(b.name)),
+      start: now,
+      end: now + 4500,
+    });
+    this.lines.set(b.id, {
+      text: this.lineSet[index][1].replace("{name}", name(a.name)),
+      start: now + 2000,
+      end: now + 6500,
+    });
+    this.encounters.set(a.id, { partner: b.id, until: now + SMALLTALK_PAUSE_MS });
+    this.encounters.set(b.id, { partner: a.id, until: now + SMALLTALK_PAUSE_MS });
+    this.cooldown.set(a.id, now + 45000);
+    this.cooldown.set(b.id, now + 45000);
+    this.pairs.set(key, now + 90000);
+    this.nextEncounter = now + 12000;
   }
 }

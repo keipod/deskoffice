@@ -162,7 +162,10 @@ export function createToolApprovalRegistry(deps: ToolApprovalRegistryDeps) {
       .catch(() => null)
       .then((text) => {
         const entry = entries.get(key);
-        if (!entry) return;
+        // A decision came in while the summary was still being generated — the card is
+        // already being closed, so sending it again below would hand the client a fresh
+        // "pending" card for a request whose outcome is already in flight.
+        if (!entry || entry.deciding) return;
         const seen = history.get(entry.req.groupKey);
         if (text && seen) history.set(entry.req.groupKey, { ...seen, summary: text });
         entry.req = {

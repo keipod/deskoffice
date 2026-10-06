@@ -1548,12 +1548,19 @@ export class OfficeRenderer {
       for (const actor of this.lastActors) {
         let rendered = this.actors.get(actor.id);
         if (rendered && rendered.lookId !== resolveOfficeLook(actor.appearance)?.id) {
+          const { previous, yaw, gait } = rendered;
           this.scene.remove(rendered.model.root);
           disposeTree(rendered.model.root);
           rendered.label.remove();
           rendered.bubble.remove();
           this.actors.delete(actor.id);
-          rendered = undefined;
+          rendered = this.createLabel(actor);
+          // An appearance change (model swap) should not reset mid-walk interpolation —
+          // carry the yaw/gait/previous-position state over so the frame does not snap or freeze.
+          rendered.previous = previous;
+          rendered.yaw = yaw;
+          rendered.gait = gait;
+          this.actors.set(actor.id, rendered);
         }
         if (!rendered) {
           rendered = this.createLabel(actor);

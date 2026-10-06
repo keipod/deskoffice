@@ -259,13 +259,13 @@ export class NpcController {
   }
 
   pauseForSmalltalk(other: NpcController): void {
-    // Keep the path and goal so the same stroll continues after the conversation ends.
-    if (this.moveState === "strolling") {
-      const dx = other.pixelX - this.pixelX,
-        dy = other.pixelY - this.pixelY;
-      this.direction =
-        Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? DIR_RIGHT : DIR_LEFT) : dy > 0 ? DIR_DOWN : DIR_UP;
-    }
+    // Face the partner regardless of moveState — an idle (seated) NPC can be smalltalk's
+    // target just as much as a strolling one, and should turn to face them too. Strolling
+    // keeps its path/goal unchanged so the same stroll continues after the conversation ends.
+    const dx = other.pixelX - this.pixelX,
+      dy = other.pixelY - this.pixelY;
+    this.direction =
+      Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? DIR_RIGHT : DIR_LEFT) : dy > 0 ? DIR_DOWN : DIR_UP;
     this.stopWalking();
   }
 

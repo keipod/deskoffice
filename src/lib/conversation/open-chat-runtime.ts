@@ -232,7 +232,14 @@ export class OpenChatRuntime {
     const work: Promise<void>[] = [];
     for (const npcId of new Set(targets)) {
       const runtime = this.runtimes.get(npcId);
-      if (!runtime || (!fromHuman && this.isSpeaking(npcId))) continue;
+      if (!runtime) continue;
+      // Spend the chain budget before the "already speaking" skip below — an NPC-to-NPC
+      // mention skipped because its target is already speaking still counts against the
+      // chain, or two NPCs that keep mentioning each other while one is mid-turn can
+      // ping-pong past the budget without ever actually both finishing a turn. A human call
+      // never spends the budget, same as before.
+      if (!fromHuman && !this.quota.spend()) break;
+      if (!fromHuman && this.isSpeaking(npcId)) continue;
       if (runtime.isBurnedOut()) {
         this.callbacks.onMentionSkipped?.(npcId, "backend_failing");
         continue;
@@ -241,7 +248,6 @@ export class OpenChatRuntime {
         this.callbacks.onQueueFull?.(npcId, sourceMessageId);
         continue;
       }
-      if (!fromHuman && !this.quota.spend()) break;
       const context: TurnContext = {
         requestId: randomUUID(),
         sourceMessageId,

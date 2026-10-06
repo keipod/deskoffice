@@ -71,7 +71,12 @@ import { createRejoinTracker, registerOnce, shouldRejoinForError } from "../sock
 import { type MapObject } from "../../lib/object-types";
 import { normalizeMeetingMap } from "../meeting-map-normalization";
 import { insideMeetingSpace, type MeetingSpace } from "../meeting-space";
-import { NpcController, type NpcData, type NpcPathfinder } from "./npc-controller";
+import {
+  NpcController,
+  type NpcData,
+  type NpcMoveState,
+  type NpcPathfinder,
+} from "./npc-controller";
 import { RemotePlayer, type RemotePlayerData } from "./remote-player";
 import { TickLoop } from "./tick-loop";
 import { Scheduler } from "./scheduler";
@@ -165,6 +170,9 @@ export class OfficeSimulation {
   private spawnRequest: { x: number; y: number } | null = null;
   private spawnInputStarted = false;
   private pendingSeatClaims = new Set<string>();
+  /** Seat ids with an in-flight `seat:claim` ack, so a same-tick scan does not send another
+   * actor to a seat that is already being claimed before the server confirms it. */
+  private pendingSeatIds = new Set<string>();
   private playerSeatGoal: string | null = null;
   private playerSpawnReady = false;
   private pendingPlayerResume: PlayerMotionGoal | null = null;
@@ -996,7 +1004,14 @@ export class OfficeSimulation {
   }
 
   requestMeetingEntry(): boolean {
-    if (this.meetingEntryPending) return false;
+    if (this.meetingEntryPending) {
+      // Already walking there — re-emit so a repeated click (or a UI that missed the first
+      // event) gets feedback instead of silence, rather than looking like the request was
+      // dropped. The player-side stuck-detection in updatePlayer() already recovers from a
+      // blocked path, so this call does not need to retry pathfinding itself.
+      EventBus.emit("meeting:entry-state", { status: "walking" });
+      return false;
+    }
     if (!this.player || !this.canMovePlayer() || !this.meetingSpace) {
       EventBus.emit("meeting:entry-state", { status: "failed", reasonCode: "map_unavailable" });
       return false;
@@ -1137,6 +1152,7 @@ export class OfficeSimulation {
         x: npc.pixelX,
         y: npc.pixelY,
         direction: directionName(npc.direction),
+        continuation: this.npcContinuation(npc),
       });
       this.socket?.emit("npc:arrived", {
         channelId: this.channelId,
@@ -1269,7 +1285,16 @@ export class OfficeSimulation {
     const generation = this.motionGeneration;
     const resume = (accepted: boolean) => {
       if (this.resumingPlayerGoal === goal) this.resumingPlayerGoal = null;
-      if (generation !== this.motionGeneration || this.spawnInputStarted || !this.player) {
+      if (
+        generation !== this.motionGeneration ||
+        this.spawnInputStarted ||
+        // A meeting-entry walk started while this seat-resume ack was still in flight. Letting
+        // this callback overwrite `currentPath` here would silently cancel that walk on the
+        // next update() tick (its `meetingEntryPending && currentPath !== meetingEntryPath`
+        // check) with no explanation to the user.
+        this.meetingEntryPending ||
+        !this.player
+      ) {
         if (accepted && goal.seatId) this.releaseSeat(this.socket?.id ?? "");
         return;
       }
@@ -1360,11 +1385,12 @@ export class OfficeSimulation {
       done(true);
       return;
     }
-    if (existing || this.pendingSeatClaims.has(actorId)) {
+    if (existing || this.pendingSeatClaims.has(actorId) || this.pendingSeatIds.has(seatId)) {
       done(false);
       return;
     }
     this.pendingSeatClaims.add(actorId);
+    this.pendingSeatIds.add(seatId);
     const generation = this.motionGeneration;
     const channelId = this.channelId;
     const socket = this.socket;
@@ -1384,6 +1410,7 @@ export class OfficeSimulation {
             return;
           }
           this.pendingSeatClaims.delete(actorId);
+          this.pendingSeatIds.delete(seatId);
           done(!error && !!result?.ok);
         },
       );
@@ -1497,7 +1524,13 @@ export class OfficeSimulation {
     const npc = this.npcs.find((n) => n.id === payload.npcId);
     if (!npc) return;
     if (!this.ensureLocalNpcOwnership(npc, payload.reason, payload.roomId)) return;
-    if (npc.moveState !== "idle") return;
+    if (npc.moveState !== "idle") {
+      // Busy right now (walking/strolling/etc) — queue it so the call is retried once the NPC
+      // goes idle instead of being silently dropped (the retry happens in the ambient scan,
+      // which checks `pendingNpcCalls` whenever an NPC settles back to idle).
+      this.pendingNpcCalls.set(payload.npcId, payload);
+      return;
+    }
     npc.calledForRoom = payload.reason === "map-chat" ? (payload.roomId ?? null) : null;
 
     // B-1. Working employees are also called **without blocking** — Hermes workers do the execution, so the card keeps running
@@ -1802,6 +1835,7 @@ export class OfficeSimulation {
     this.resumingPlayerGoal = null;
     this.motionGeneration++;
     this.pendingSeatClaims.clear();
+    this.pendingSeatIds.clear();
   };
 
   private handleSocketConnect = (): void => {
@@ -2162,6 +2196,7 @@ export class OfficeSimulation {
     this.resumingPlayerGoal = null;
     this.motionGeneration++;
     this.pendingSeatClaims.clear();
+    this.pendingSeatIds.clear();
     this.playerSeatGoal = null;
     this.spawnRequest = { x, y };
     this.spawnInputStarted = false;
@@ -2575,10 +2610,14 @@ export class OfficeSimulation {
     for (const npc of this.npcs) {
       const partnerId = this.smalltalk.partner(npc.id, this.now);
       const partner = this.npcs.find((other) => other.id === partnerId);
-      const paused = !!partner && leader;
+      // The speech bubble (`actors()`'s `this.smalltalk.text(...)`) shows on every client, not
+      // only the ambient leader's. `ambientPaused` must follow suit on every client too, or a
+      // non-leader shows the bubble while `walking` keeps animating (`!npc.ambientPaused && ...`).
+      // Only the network side-effects below stay leader-gated.
+      const paused = !!partner;
       if (paused) {
         npc.pauseForSmalltalk(partner);
-        if (!npc.ambientPaused && npc.moveState === "strolling") {
+        if (leader && !npc.ambientPaused && npc.moveState === "strolling") {
           this.socket?.emit("npc:position-update", {
             channelId: this.channelId,
             npcId: npc.id,
@@ -2710,6 +2749,12 @@ export class OfficeSimulation {
                 (other !== npc &&
                   other.ambientSchedule.seatTarget?.x === seat.x &&
                   other.ambientSchedule.seatTarget?.y === seat.y),
+            ) &&
+            // Exclude seats with an in-flight claim from an earlier NPC processed this same
+            // tick — `reserveSeat`'s ack is async, so `motionSnapshot.current.seats` would not
+            // yet reflect it, letting a second NPC walk toward the same seat concurrently.
+            !this.pendingSeatIds.has(
+              `${(seat.x + 0.5) * TILE_SIZE}:${(seat.y + 0.5) * TILE_SIZE}`,
             ) &&
             walkable(seat.x, seat.y) &&
             destinationFree(seat.x, seat.y) &&
@@ -2888,6 +2933,15 @@ export class OfficeSimulation {
         });
         this.socket?.emit("npc:arrived", { channelId: this.channelId, npcId: npc.id });
       }
+      if (result === "idle" && (npc.moveState as NpcMoveState) === "idle") {
+        // A call that arrived while this NPC was busy was queued in handleNpcCallToPlayer
+        // instead of being dropped — replay it now that the NPC has settled to idle.
+        const pending = this.pendingNpcCalls.get(npc.id);
+        if (pending) {
+          this.pendingNpcCalls.delete(npc.id);
+          this.handleNpcCallToPlayer(pending);
+        }
+      }
       if (result === "arrived") {
         if (!npc.calledForRoom)
           EventBus.emit("npc:bubble", {
@@ -3023,6 +3077,27 @@ export class OfficeSimulation {
         this.pathLastDist = dist;
       } else {
         this.pathStuckTimer++;
+      }
+
+      // Stuck detection (same threshold as NPCs): another actor can occupy the waypoint
+      // forever, so recompute the whole path to the destination and detour.
+      if (this.pathStuckTimer > 30) {
+        this.pathStuckTimer = 0;
+        this.pathLastDist = Infinity;
+        const destination = this.currentPath[this.currentPath.length - 1];
+        const detour = this.findPlayerPath(
+          Math.floor(player.x / TILE_SIZE),
+          Math.floor(player.y / TILE_SIZE),
+          destination.x,
+          destination.y,
+        );
+        if (this.currentPath === this.meetingEntryPath) this.meetingEntryPath = detour ?? null;
+        this.currentPath = detour ?? null;
+        this.pathIndex = 0;
+        if (!this.currentPath) this.traffic.clear("player:local");
+        // The old `target`/`dist` above no longer match the new path — resume next tick.
+        this.sendPosition(player.x, player.y, directionName(this.currentDirection), "idle");
+        return;
       }
 
       // Unlike ordinary destinations, seats must be reached at their center.

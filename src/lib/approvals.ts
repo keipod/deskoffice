@@ -24,6 +24,7 @@ import { requestEmitRoomMessage } from "@/lib/automation-registry";
 import { appendRoomMessage, ensureOfficeRoom } from "@/lib/chat-rooms";
 import { getChannelOwnerId } from "@/lib/chat-rooms";
 import { parseRequester } from "@/lib/approval-requester";
+import { withChannelAutomationLock } from "@/lib/channel-automation-lock";
 
 export type ApprovalSource = {
   kind: "meeting" | "manual" | "chat_proposal";
@@ -148,31 +149,40 @@ export async function createApprovalBatch(
   // **key order**, so if a caller builds `{id, kind}` instead, the same source produces a
   // different string and a new approval gets created.
   const sourceJson = JSON.stringify({ kind: input.source.kind, id: input.source.id });
-  const [existing] = await db
-    .select({ id: approvals.id })
-    .from(approvals)
-    .where(
-      and(
-        eq(approvals.channelId, ctx.channelId),
-        eq(approvals.type, input.type),
-        eq(approvals.status, "pending"),
-        eq(approvals.sourceJson, sourceJson),
-      ),
-    )
-    .limit(1);
 
-  let approvalId: string;
-  if (existing) {
-    approvalId = existing.id;
-    const already = new Set(await approvalTargetIds(approvalId));
-    // The PK does block duplicate inserts, but instead of silently swallowing that, only insert what's missing.
-    const missing = created.filter((taskId) => !already.has(taskId));
-    if (missing.length > 0)
-      await db.insert(approvalTargets).values(missing.map((taskId) => ({ approvalId, taskId })));
-  } else {
-    approvalId = randomUUID();
+  // The existing-row lookup and the insert-if-missing below are a check-then-act: two
+  // near-simultaneous calls for the same source (double-click, a retried request racing the
+  // original) can both see "no existing row" before either commits, and both create a new
+  // approval for the same cards. Serializing on the channel closes that window — the second
+  // caller's lookup now runs after the first caller's insert is visible.
+  const approvalId = await withChannelAutomationLock(ctx.channelId, async () => {
+    const [existing] = await db
+      .select({ id: approvals.id })
+      .from(approvals)
+      .where(
+        and(
+          eq(approvals.channelId, ctx.channelId),
+          eq(approvals.type, input.type),
+          eq(approvals.status, "pending"),
+          eq(approvals.sourceJson, sourceJson),
+        ),
+      )
+      .limit(1);
+
+    if (existing) {
+      const already = new Set(await approvalTargetIds(existing.id));
+      // The PK does block duplicate inserts, but instead of silently swallowing that, only insert what's missing.
+      const missing = created.filter((taskId) => !already.has(taskId));
+      if (missing.length > 0)
+        await db
+          .insert(approvalTargets)
+          .values(missing.map((taskId) => ({ approvalId: existing.id, taskId })));
+      return existing.id;
+    }
+
+    const newApprovalId = randomUUID();
     await db.insert(approvals).values({
-      id: approvalId,
+      id: newApprovalId,
       channelId: ctx.channelId,
       type: input.type,
       status: "pending",
@@ -186,17 +196,20 @@ export async function createApprovalBatch(
       payloadJson: JSON.stringify({ boardSlug: board }),
     });
     try {
-      await db.insert(approvalTargets).values(created.map((taskId) => ({ approvalId, taskId })));
+      await db
+        .insert(approvalTargets)
+        .values(created.map((taskId) => ({ approvalId: newApprovalId, taskId })));
     } catch (error) {
       // The two inserts can't be wrapped in one transaction — the better-sqlite3 driver
       // rejects a transaction callback that returns a Promise ("Transaction function
       // cannot return a promise", confirmed 2026-09-21). So a compensating delete
       // recreates the same guarantee: a `task_execution` approval with zero targets has
       // nothing to press, so it's just noise and isn't left behind.
-      await db.delete(approvals).where(eq(approvals.id, approvalId));
+      await db.delete(approvals).where(eq(approvals.id, newApprovalId));
       throw error;
     }
-  }
+    return newApprovalId;
+  });
 
   await announceApproval(ctx.channelId, approvalId, input, created.length);
 

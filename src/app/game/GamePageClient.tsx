@@ -554,8 +554,10 @@ function GamePageInner({ onFatal }: GamePageClientProps) {
   const npcMotionSnapshotRef = useRef<MotionSnapshot | null>(null);
   const [npcCallers, setNpcCallers] = useState<Record<string, string>>({}); // npcId → callerSocketId
 
-  // Ref to accumulate streaming text (avoids setState-in-effect issues)
-  const streamBufferRef = useRef("");
+  // Ref to accumulate streaming text (avoids setState-in-effect issues). Keyed by npcId —
+  // two NPCs can stream concurrently (independent per-DM server queues), and a single shared
+  // buffer would interleave their text when the dialog target changes mid-stream.
+  const streamBufferRef = useRef(new Map<string, string>());
   const socketRef = useRef<Socket | null>(null);
   // Current player position — updated from the simulation for beforeunload save
   const playerPositionRef = useRef<{ x: number; y: number } | null>(null);
@@ -1200,17 +1202,19 @@ function GamePageInner({ onFatal }: GamePageClientProps) {
         if (dialogNpcRef.current && dialogNpcRef.current.npcId !== data.npcId) return;
 
         if (chunk) {
-          const continuing = streamBufferRef.current.length > 0;
-          streamBufferRef.current += chunk;
-          const buffered = streamBufferRef.current;
+          const previous = streamBufferRef.current.get(data.npcId) ?? "";
+          const continuing = previous.length > 0;
+          const buffered = previous + chunk;
+          streamBufferRef.current.set(data.npcId, buffered);
           EventBus.emit("chat:speech", { actorId: data.npcId, text: buffered });
           setIsNpcStreaming(true);
           setNpcMessages((prev) => upsertLegacyNpcChunk(prev, buffered, continuing));
         }
         if (data.done) {
           setIsNpcStreaming(false);
-          const hadBufferedContent = streamBufferRef.current.length > 0;
-          const cleaned = streamBufferRef.current.trim();
+          const buffered = streamBufferRef.current.get(data.npcId) ?? "";
+          const hadBufferedContent = buffered.length > 0;
+          const cleaned = buffered.trim();
           if (hadBufferedContent) {
             setNpcMessages((prev) => {
               const lastIdx = prev.length - 1;
@@ -1222,7 +1226,7 @@ function GamePageInner({ onFatal }: GamePageClientProps) {
               return prev;
             });
           }
-          streamBufferRef.current = "";
+          streamBufferRef.current.delete(data.npcId);
         }
       });
 
@@ -1274,7 +1278,7 @@ function GamePageInner({ onFatal }: GamePageClientProps) {
     npcMessagesRef.current = [];
     setIsNpcStreaming(false);
     setNpcSelectList(null);
-    streamBufferRef.current = "";
+    streamBufferRef.current.clear();
     setNpcActivityKey(null);
   }, []);
 
