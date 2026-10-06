@@ -1,5 +1,13 @@
 # Scripts
 
+## Local service
+
+From the repository root, run `./up.sh` to start DeskOffice at
+`http://localhost:3102`, and `./down.sh` to stop it while retaining data.
+Docker Desktop is required. The launcher creates `.env.lite` only when missing,
+uses the isolated Compose project `deskoffice`, and checks database and HTTP
+readiness before reporting success. Existing configuration is preserved.
+
 This folder is split by purpose.
 
 - `setup/`

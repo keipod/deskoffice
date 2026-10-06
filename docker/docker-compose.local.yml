@@ -1,0 +1,23 @@
+# Managed by the repository's up.sh / down.sh.
+services:
+  deskrpg-app:
+    image: ${DESKRPG_IMAGE:-ghcr.io/dandacompany/deskrpg:latest}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3102:3000"
+      - "127.0.0.1:3103:3001"
+    volumes:
+      - ../public/assets:/app/public/assets
+      - deskrpg-data:/app/data
+    environment:
+      DB_TYPE: sqlite
+      SQLITE_PATH: /app/data/deskrpg.db
+      DESKRPG_HOME: /app/data/home
+      JWT_SECRET: ${JWT_SECRET:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      INTERNAL_HOSTNAME: 0.0.0.0
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  deskrpg-data:
