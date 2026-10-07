@@ -46,9 +46,10 @@ test("Bside browser skill is a profile-pinned SNS browsing playbook", () => {
   assert.equal(BSIDE_BROWSER_SKILL_NAME, "deskoffice-bside-browser");
   assert.ok(
     skill.startsWith(
-      `---\nname: ${BSIDE_BROWSER_SKILL_NAME}\ndescription: ${BSIDE_BROWSER_SKILL_DESCRIPTION}\n---`,
+      `---\nname: ${BSIDE_BROWSER_SKILL_NAME}\ndescription: ${BSIDE_BROWSER_SKILL_DESCRIPTION}\n`,
     ),
   );
+  assert.match(skill, /\n---\n\n# DeskOffice Bside Personal Browser\n\n## When to Use\n/);
   for (const tool of TOOLS) {
     assert.match(skill, new RegExp(`\`deskoffice_bside_${tool}\``), tool);
   }
@@ -63,4 +64,13 @@ test("Bside browser skill is a profile-pinned SNS browsing playbook", () => {
   }
   assert.match(skill, /sensitive: true/);
   assert.match(skill, /human approval/);
+});
+
+// Hermes refuses a new skill whose description exceeds its 60-char system-prompt budget.
+test("Bside browser skill description fits Hermes' one-sentence budget", () => {
+  assert.ok(
+    BSIDE_BROWSER_SKILL_DESCRIPTION.length <= 60,
+    `${BSIDE_BROWSER_SKILL_DESCRIPTION.length} chars`,
+  );
+  assert.match(BSIDE_BROWSER_SKILL_DESCRIPTION, /^[^.]+\.$/);
 });

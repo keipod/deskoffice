@@ -5,16 +5,28 @@
  */
 export const BSIDE_BROWSER_SKILL_NAME = "deskoffice-bside-browser";
 
+// Hermes rejects new skills whose description is over 60 chars: keep it one trigger-first sentence.
 export const BSIDE_BROWSER_SKILL_DESCRIPTION =
-  "Use this agent's own Bside browser to read, browse and manage SNS accounts (YouTube, Instagram, Threads) like a person.";
+  "Browse and manage SNS accounts in your own Bside browser.";
 
 export function bsideBrowserSkillTemplate(): string {
   return `---
 name: ${BSIDE_BROWSER_SKILL_NAME}
 description: ${BSIDE_BROWSER_SKILL_DESCRIPTION}
+version: 1.0.0
+author: DeskOffice
+license: MIT
+metadata:
+  hermes:
+    tags: [browser, sns, youtube, instagram, threads, bside]
+    related_skills: []
 ---
 
 # DeskOffice Bside Personal Browser
+
+## When to Use
+
+Any task that needs a real, logged-in browser: checking or posting on YouTube, Instagram or Threads, reading comments and analytics, replying, researching pages, or anything a person would do by hand in a browser.
 
 The \`bside\` MCP server is this employee's own PC/browser. It is pinned to one Bside profile: the logged-in accounts, cookies and history belong to this employee only. Other employees use other profiles, so several of you can work at the same time.
 
