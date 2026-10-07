@@ -12,6 +12,7 @@ import type {
 import { useT } from "@/lib/i18n";
 
 import { parseMcpJson } from "./connector-json-import";
+import { buildBsideMcpConfig, type BsideMcpPresetValues } from "./bside-mcp-preset";
 import { connectorErrorText } from "./connector-error-text";
 import { hasSecretQuery } from "./url-secret-hint";
 import type { ConnectorsApi } from "./connectors-api";
@@ -25,6 +26,7 @@ export type ConnectorAddPaneProps = {
 
 type Pair = { key: string; value: string };
 type HttpAuth = "none" | "bearer" | "oauth";
+type AddTab = "catalog" | "bside" | "custom";
 
 type Form = {
   name: string;
@@ -54,6 +56,12 @@ const EMPTY: Form = {
   env: [],
   passthroughEnv: "",
   cwd: "",
+};
+
+const EMPTY_BSIDE: BsideMcpPresetValues = {
+  profileId: "",
+  apiUrl: "",
+  apiToken: "",
 };
 
 const lines = (s: string) =>
@@ -107,13 +115,14 @@ function toInput(form: Form): McpServerInput {
  */
 export default function ConnectorAddPane({ api, onAdded, onCancel }: ConnectorAddPaneProps) {
   const t = useT();
-  const [tab, setTab] = useState<"catalog" | "custom">("catalog");
+  const [tab, setTab] = useState<AddTab>("catalog");
   const [entries, setEntries] = useState<McpCatalogEntry[] | null>(null);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<McpCatalogEntry | null>(null);
   const [catalogEnv, setCatalogEnv] = useState<Record<string, string>>({});
   const [form, setForm] = useState<Form>(EMPTY);
+  const [bside, setBside] = useState<BsideMcpPresetValues>(EMPTY_BSIDE);
   const [json, setJson] = useState("");
   const [jsonState, setJsonState] = useState<{ ok: boolean; name?: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -168,6 +177,35 @@ export default function ConnectorAddPane({ api, onAdded, onCancel }: ConnectorAd
     } finally {
       if (alive.current) setBusy(false);
     }
+  };
+
+  /** The preset is fixed; only the Bside profile and optional bridge settings come from the user. */
+  const installBside = async () => {
+    const config = buildBsideMcpConfig(bside);
+    setBusy(true);
+    setError(null);
+    let server: McpServerView;
+    try {
+      server = await api.create(config.input);
+    } catch (e) {
+      if (alive.current) {
+        setError(connectorErrorText(t, e));
+        setBusy(false);
+      }
+      return;
+    }
+    // Match the plugin's reported names rather than assuming it accepted every optional env key.
+    const reported = new Set(server.secrets.map((secret) => secret.key));
+    setBside((current) => ({ ...current, apiUrl: "", apiToken: "" }));
+    try {
+      for (const [key, value] of Object.entries(config.secretValues)) {
+        if (reported.has(key)) await api.putSecret(server.name, key, value);
+      }
+    } catch {
+      /* The connector exists; its detail view shows a missing value and can accept it again. */
+    }
+    finish(server);
+    if (alive.current) setBusy(false);
   };
 
   const save = async () => {
@@ -237,6 +275,7 @@ export default function ConnectorAddPane({ api, onAdded, onCancel }: ConnectorAd
   const formReady =
     form.name.trim() !== "" &&
     (form.transport === "http" ? form.url.trim() !== "" : form.command.trim() !== "");
+  const bsideReady = bside.profileId.trim() !== "";
   const requiredMissing =
     picked?.requiredEnv.some((r) => r.required && !catalogEnv[r.name]?.trim()) ?? true;
 
@@ -396,6 +435,77 @@ export default function ConnectorAddPane({ api, onAdded, onCancel }: ConnectorAd
         )}
       </section>
     </div>
+  );
+
+  const bsidePane = (
+    <section
+      data-bside-preset
+      className="flex max-w-xl flex-col gap-3 rounded border border-border bg-surface p-3"
+    >
+      <div>
+        <h4 className="font-semibold text-text">{t("connectors.add.bside.title")}</h4>
+        <p className="mt-0.5 text-xs text-text-muted">{t("connectors.add.bside.intro")}</p>
+      </div>
+      <p data-bside-guidance className="rounded bg-surface-raised p-2 text-xs text-text-muted">
+        {t("connectors.add.bside.gatewayGuidance")}
+      </p>
+      <p className="font-mono text-xs text-text-dim">
+        <code data-bside-command>deskoffice-bside-mcp --profile &lt;Bside profile ID&gt;</code>
+      </p>
+      <form
+        className="flex flex-col gap-3"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (bsideReady && !busy) void installBside();
+        }}
+      >
+        <label className="flex flex-col gap-0.5 text-xs text-text-muted">
+          {t("connectors.add.bside.profileId")}
+          <input
+            name="bside-profile-id"
+            value={bside.profileId}
+            autoComplete="off"
+            spellCheck={false}
+            onChange={(e) => setBside((current) => ({ ...current, profileId: e.target.value }))}
+            className={`${inputCls} font-mono`}
+          />
+          <span className="text-text-dim">{t("connectors.add.bside.profileHint")}</span>
+        </label>
+        <label className="flex flex-col gap-0.5 text-xs text-text-muted">
+          {t("connectors.add.bside.apiUrl")}
+          <input
+            name="bside-api-url"
+            value={bside.apiUrl ?? ""}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="https://…"
+            onChange={(e) => setBside((current) => ({ ...current, apiUrl: e.target.value }))}
+            className={inputCls}
+          />
+          <span className="font-mono text-text-dim">BSIDE_API_URL</span>
+        </label>
+        <label className="flex flex-col gap-0.5 text-xs text-text-muted">
+          {t("connectors.add.bside.apiToken")}
+          <input
+            name="bside-api-token"
+            value={bside.apiToken ?? ""}
+            onChange={(e) => setBside((current) => ({ ...current, apiToken: e.target.value }))}
+            className={inputCls}
+            {...SECRET_INPUT_PROPS}
+          />
+          <span className="font-mono text-text-dim">BSIDE_API_TOKEN</span>
+        </label>
+        <p className="text-xs text-text-muted">{t("connectors.add.bside.untrusted")}</p>
+        <button
+          type="submit"
+          data-action="bside-install"
+          disabled={!bsideReady || busy}
+          className="self-start rounded bg-primary px-3 py-1 text-white disabled:opacity-50"
+        >
+          {busy ? t("connectors.add.bside.adding") : t("connectors.add.bside.add")}
+        </button>
+      </form>
+    </section>
   );
 
   const customPane = confirming ? (
@@ -624,7 +734,7 @@ export default function ConnectorAddPane({ api, onAdded, onCancel }: ConnectorAd
   return (
     <div className="flex flex-col gap-3 text-sm">
       <div className="flex items-center gap-2">
-        {(["catalog", "custom"] as const).map((k) => (
+        {(["catalog", "bside", "custom"] as const).map((k) => (
           <button
             key={k}
             type="button"
@@ -648,7 +758,7 @@ export default function ConnectorAddPane({ api, onAdded, onCancel }: ConnectorAd
           {t("connectors.add.cancel")}
         </button>
       </div>
-      {tab === "catalog" ? catalogPane : customPane}
+      {tab === "catalog" ? catalogPane : tab === "bside" ? bsidePane : customPane}
       {error && (
         <p data-error className="text-xs text-danger">
           {error}

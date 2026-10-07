@@ -3527,6 +3527,7 @@ const ko: Record<string, string> = {
   "skills.tab.graph": "학습 관계도",
   "skills.add": "추가",
   "skills.add.new": "새로 만들기",
+  "skills.add.bside": "Bside 브라우저",
   "skills.add.hub": "Hub 검색",
   "skills.add.url": "URL",
   "skills.bulk.enableAll": "전체 켜기",
@@ -3562,6 +3563,13 @@ const ko: Record<string, string> = {
   "skills.create.name": "이름(영문 소문자·숫자·하이픈)",
   "skills.create.description": "한 줄 설명",
   "skills.create.submit": "만들기",
+  "skills.bside.title": "Bside 개인 브라우저 스킬",
+  "skills.bside.intro":
+    "이 NPC가 프로필에 고정된 Bside MCP 브라우저를 쓰도록 DeskOffice 작업 지침을 설치합니다.",
+  "skills.bside.boundary":
+    "NPC의 Bside 브라우저를 연결한 뒤 쓰세요. 범위가 제한된 브라우저 도구만 쓰며 Bside의 사람 승인 경계를 지킵니다.",
+  "skills.bside.install": "Bside 브라우저 스킬 설치",
+  "skills.bside.installed": "Bside 브라우저 스킬 설치됨",
   "skills.hub.verdict": "스캔 판정: {verdict} · 신뢰: {trust}",
   "skills.hub.hasScripts": "실행 코드(scripts/)가 들어 있습니다",
   "skills.hub.blocked": "Hermes 가 이 스킬의 설치를 막습니다: {reason}",
@@ -3833,6 +3841,8 @@ const ko: Record<string, string> = {
   "connectors.error.unknown_env_key": "알 수 없는 환경변수입니다: {detail}",
   "connectors.error.catalog_install_failed": "카탈로그 설치에 실패했습니다: {detail}",
   "connectors.error.secret_key_not_referenced": "설정에서 쓰지 않는 비밀값 이름입니다",
+  "connectors.error.bside_profile_not_copyable":
+    "Bside 개인 브라우저는 한 NPC에 묶이므로 복사할 수 없습니다. 다른 Bside 프로필로 각각 추가하세요.",
   "connectors.error.invalid_name": "쓸 수 없는 이름입니다",
   "connectors.error.timeout": "응답이 없어 중단했습니다",
   "connectors.error.unreachable": "서버에 연결하지 못했습니다",
@@ -3892,7 +3902,20 @@ const ko: Record<string, string> = {
   // --- /content-i18n:D ---
   // --- connectors: add · oauth · copy ---
   "connectors.add.tab.catalog": "카탈로그",
+  "connectors.add.tab.bside": "Bside 브라우저",
   "connectors.add.tab.custom": "직접 추가",
+  "connectors.add.bside.title": "이 NPC의 Bside 브라우저",
+  "connectors.add.bside.intro": "이 NPC의 개인 PC·브라우저가 될 Bside 프로필을 연결합니다.",
+  "connectors.add.bside.gatewayGuidance":
+    "deskoffice-bside-mcp 는 Hermes 게이트웨이 호스트에서 실행됩니다. 그 호스트에서 Bside에 닿을 수 있어야 하며, 루프백 주소는 Bside가 같은 호스트에서 실행될 때만 쓰세요.",
+  "connectors.add.bside.profileId": "Bside 프로필 ID",
+  "connectors.add.bside.profileHint": "이 프로필이 NPC 전용 브라우저 작업 공간이 됩니다.",
+  "connectors.add.bside.apiUrl": "Bside API URL (선택)",
+  "connectors.add.bside.apiToken": "Bside API 토큰 (선택)",
+  "connectors.add.bside.untrusted":
+    "이 커넥터는 신뢰하지 않음으로 시작하므로, 쓰기 가능한 브라우저 도구는 확인이 필요합니다.",
+  "connectors.add.bside.add": "Bside 브라우저 추가",
+  "connectors.add.bside.adding": "Bside 브라우저를 추가하는 중…",
   "connectors.add.search": "카탈로그 검색",
   "connectors.add.loading": "카탈로그를 불러오는 중…",
   "connectors.add.catalogEmpty": "맞는 항목이 없습니다",
@@ -3961,6 +3984,8 @@ const ko: Record<string, string> = {
   "connectors.copy.title": "다른 직원에게 복사",
   "connectors.copy.intro": '"{server}" 설정을 받을 직원을 고르세요',
   "connectors.copy.noTargets": "이 채널에 복사할 수 있는 다른 직원이 없습니다",
+  "connectors.copy.bsideBlocked":
+    "Bside 개인 브라우저는 복사할 수 없습니다. 다른 NPC에 전용 Bside 프로필을 만든 뒤 그곳에서 이 커넥터를 추가하세요.",
   "connectors.copy.notice": "비밀값·로그인은 옮기지 않습니다. 받은 직원은 다시 인증해야 합니다.",
   "connectors.copy.submit": "복사",
   "connectors.copy.copying": "복사하는 중…",

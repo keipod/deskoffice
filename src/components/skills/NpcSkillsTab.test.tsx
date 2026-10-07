@@ -3,6 +3,7 @@ import test from "node:test";
 import { act } from "react";
 
 import NpcSkillsTab from "./NpcSkillsTab";
+import { BSIDE_BROWSER_SKILL_NAME } from "./bside-browser-skill";
 import {
   LIST,
   ROOT,
@@ -154,4 +155,38 @@ test("[Use] is hidden without the skill_invocation capability or a handler", asy
   mockFetch({ [LIST]: view({ skills: [row("research")], skillInvocation: true }) });
   await render(tab());
   assert.equal(container.querySelectorAll("[data-use-skill]").length, 0);
+});
+
+test("a skill-manager refresh tick rereads the Skills menu and exposes a newly installed Bside skill", async () => {
+  const routes = { [LIST]: view({ skillInvocation: true }) };
+  const log = mockFetch(routes);
+  const use = () => {};
+  await render(
+    <NpcSkillsTab
+      channelId="ch-1"
+      npcId="n-1"
+      onOpenManager={() => {}}
+      onUseSkill={use}
+      refreshTick={0}
+    />,
+  );
+  assert.ok(!container.querySelector(`[data-skill-row="${BSIDE_BROWSER_SKILL_NAME}"]`));
+
+  routes[LIST] = view({
+    skills: [row("weekly"), row(BSIDE_BROWSER_SKILL_NAME)],
+    skillInvocation: true,
+  });
+  await render(
+    <NpcSkillsTab
+      channelId="ch-1"
+      npcId="n-1"
+      onOpenManager={() => {}}
+      onUseSkill={use}
+      refreshTick={1}
+    />,
+  );
+
+  assert.ok(container.querySelector(`[data-skill-row="${BSIDE_BROWSER_SKILL_NAME}"]`));
+  assert.ok(container.querySelector(`[data-use-skill="${BSIDE_BROWSER_SKILL_NAME}"]`));
+  assert.equal(log.calls.filter((call) => call === LIST).length, 2);
 });

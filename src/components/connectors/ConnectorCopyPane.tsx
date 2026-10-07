@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Loader2, XCircle } from "lucide-react";
 
 import type { McpServerDetail } from "@/lib/hermes/plugin-client-types";
+import { isDeskOfficeBsideBridge } from "@/lib/bside-mcp";
 import { useT } from "@/lib/i18n";
 
 import { connectorErrorText } from "./connector-error-text";
@@ -55,8 +56,10 @@ export default function ConnectorCopyPane({
   }, [api, server, t]);
 
   const stdio = detail?.transport === "stdio";
+  const bsidePersonalBrowser = isDeskOfficeBsideBridge(detail?.command, detail?.args);
   const command = stdio ? [detail.command ?? "", ...detail.args].join(" ").trim() : "";
-  const canCopy = !!detail && picked.length > 0 && (!stdio || stdioOk) && !busy;
+  const canCopy =
+    !!detail && !bsidePersonalBrowser && picked.length > 0 && (!stdio || stdioOk) && !busy;
   const nameOf = (npcId: string) => targets.find((x) => x.npcId === npcId)?.name ?? npcId;
   const resultText = (r: CopyResult) =>
     r.ok
@@ -87,7 +90,14 @@ export default function ConnectorCopyPane({
         <p>{t("connectors.copy.notice")}</p>
         <p>{t("connectors.copy.carried")}</p>
       </div>
-      {targets.length === 0 ? (
+      {bsidePersonalBrowser ? (
+        <p
+          data-bside-copy-blocked
+          className="rounded border border-border p-2 text-xs text-text-muted"
+        >
+          {t("connectors.copy.bsideBlocked")}
+        </p>
+      ) : targets.length === 0 ? (
         <p className="text-xs text-text-dim">{t("connectors.copy.noTargets")}</p>
       ) : (
         <ul className="flex flex-col gap-1">
@@ -112,7 +122,7 @@ export default function ConnectorCopyPane({
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
         </p>
       )}
-      {stdio && (
+      {stdio && !bsidePersonalBrowser && (
         <div
           data-stdio-warning
           className="flex flex-col gap-1 rounded border border-danger/40 p-2 text-xs"

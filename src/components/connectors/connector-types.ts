@@ -34,6 +34,7 @@ export const CONNECTOR_ERROR_CODES = [
   "unknown_env_key",
   "catalog_install_failed",
   "secret_key_not_referenced",
+  "bside_profile_not_copyable",
   "invalid_name",
   "timeout",
   "unreachable",

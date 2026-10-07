@@ -382,6 +382,8 @@ function GamePageInner({ onFatal }: GamePageClientProps) {
   // "Ask in chat" from the skill manager must land on the chat tab even for the employee already open.
   const [npcTabRequest, setNpcTabRequest] = useState<NpcTabRequest | null>(null);
   const [skillChipRequest, setSkillChipRequest] = useState<SkillChipRequest | null>(null);
+  // Lets the still-mounted Skills tab immediately show an item installed from its manager modal.
+  const [skillsRefreshTick, setSkillsRefreshTick] = useState(0);
   // A skills-tab [Use] switches that NPC's window to chat and drops the skill into its input as a chip.
   const handleUseSkill = useCallback((npcId: string, skill: string) => {
     setNpcTabRequest((prev) => ({ npcId, tab: "chat", seq: (prev?.seq ?? 0) + 1 }));
@@ -3035,6 +3037,7 @@ function GamePageInner({ onFatal }: GamePageClientProps) {
         npcTabRequest={npcTabRequest}
         skillChipRequest={skillChipRequest}
         onUseSkill={handleUseSkill}
+        skillsRefreshTick={skillsRefreshTick}
         onOpenSkillManager={(npcId, skillName) =>
           setSkillManagerNpc({
             npcId,
@@ -3886,6 +3889,7 @@ function GamePageInner({ onFatal }: GamePageClientProps) {
           npcName={skillManagerNpc.npcName}
           initialSkill={skillManagerNpc.skillName}
           onClose={() => setSkillManagerNpc(null)}
+          onBsideSkillInstalled={() => setSkillsRefreshTick((tick) => tick + 1)}
           onAskInChat={() => {
             // Reference files are changed by asking the employee — close the manager and open their chat.
             const { npcId, npcName } = skillManagerNpc;

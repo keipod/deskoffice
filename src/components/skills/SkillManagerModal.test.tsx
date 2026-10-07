@@ -4,6 +4,7 @@ import { act } from "react";
 
 import SkillDetailPane from "./SkillDetailPane";
 import SkillManagerModal from "./SkillManagerModal";
+import { BSIDE_BROWSER_SKILL_NAME, bsideBrowserSkillTemplate } from "./bside-browser-skill";
 import { createSkillsApi } from "./skills-api";
 import {
   $,
@@ -61,7 +62,7 @@ const extras = {
 };
 
 let closed = 0;
-const modal = () => (
+const modal = (onBsideSkillInstalled?: () => void) => (
   <SkillManagerModal
     channelId="ch-1"
     npcId="n-1"
@@ -69,6 +70,7 @@ const modal = () => (
     onClose={() => {
       closed += 1;
     }}
+    onBsideSkillInstalled={onBsideSkillInstalled}
   />
 );
 
@@ -197,6 +199,56 @@ test("create fills the template and POSTs; an invalid name disables the button",
   const body = log.bodies[`POST ${ROOT}/`] as { name: string; content: string };
   assert.equal(body.name, "invoice");
   assert.ok(body.content.startsWith("---\nname: invoice\ndescription: 청구서\n---"));
+});
+
+test("Bside browser skill installs a scoped MCP work playbook from the Skills menu", async () => {
+  const log = mockFetch({
+    ...extras,
+    [LIST]: listBody(),
+    [`POST ${ROOT}/`]: { name: BSIDE_BROWSER_SKILL_NAME },
+    [`GET ${ROOT}/${BSIDE_BROWSER_SKILL_NAME}`]: detail({ name: BSIDE_BROWSER_SKILL_NAME }),
+    [`GET ${ROOT}/${BSIDE_BROWSER_SKILL_NAME}/file?path=SKILL.md`]: file(
+      bsideBrowserSkillTemplate(),
+      "bside-hash",
+    ),
+  });
+  await render(modal());
+  await click('[data-tab="add"]');
+  await click('[data-add="bside"]');
+  assert.ok(container.querySelector("[data-bside-skill]"));
+  await click('[data-action="install-bside-skill"]');
+
+  const body = log.bodies[`POST ${ROOT}/`] as {
+    name: string;
+    category: string;
+    content: string;
+  };
+  assert.equal(body.name, BSIDE_BROWSER_SKILL_NAME);
+  assert.equal(body.category, "browser");
+  assert.equal(body.content, bsideBrowserSkillTemplate());
+});
+
+test("installing the Bside browser skill refreshes the underlying Skills tab", async () => {
+  let refreshed = 0;
+  mockFetch({
+    ...extras,
+    [LIST]: listBody(),
+    [`POST ${ROOT}/`]: { name: BSIDE_BROWSER_SKILL_NAME },
+    [`GET ${ROOT}/${BSIDE_BROWSER_SKILL_NAME}`]: detail({ name: BSIDE_BROWSER_SKILL_NAME }),
+    [`GET ${ROOT}/${BSIDE_BROWSER_SKILL_NAME}/file?path=SKILL.md`]: file(
+      bsideBrowserSkillTemplate(),
+      "bside-hash",
+    ),
+  });
+  await render(
+    modal(() => {
+      refreshed += 1;
+    }),
+  );
+  await click('[data-tab="add"]');
+  await click('[data-add="bside"]');
+  await click('[data-action="install-bside-skill"]');
+  assert.equal(refreshed, 1);
 });
 
 test("Esc closes, but not when a higher layer already handled it (defaultPrevented)", async () => {

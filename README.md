@@ -258,6 +258,32 @@ Check the result with `hermes plugins list`: `deskrpg` should be `enabled` at ve
 
 **Approval policies work on upstream Hermes.** From plugin 0.27.0 the plugin enforces card approval (capability `review_hooks_v1`) with documented Hermes hooks and a plugin-owned store, without changing Hermes core: an implementer cannot finish its own card, a card waiting for a person sits in `review` with no assignee, and the reviewer never approves work it did itself. Gateways without the capability create cards without a policy, and the board says they complete without approval. On upstream's package-manager install, set `HERMES_BIN` to the Hermes launcher so kanban workers can start (the setup wizard does this on Linux, and the gateway page shows the command otherwise). If you ran the earlier Dante Labs compatibility patch, follow the plugin's [steps for moving off the patched core](https://github.com/dandacompany/deskrpg-hermes-plugin#moving-an-install-off-the-patched-core).
 
+### Bside browser connector
+
+To give an NPC its own Bside personal PC/browser, open that NPC's **Connectors** tab, choose
+**Manage**, then **Add → Bside browser**. Enter the Bside profile ID. `BSIDE_API_URL` (an optional
+endpoint) and `BSIDE_API_TOKEN` (an optional token) are stored as MCP secrets, never in the
+connector's create request. The preset creates:
+
+```text
+command: deskoffice-bside-mcp
+args:    --profile <Bside profile ID>
+trust:   untrusted
+```
+
+Install the separately deployed `deskoffice-bside-mcp` bridge on the **Hermes gateway host** and
+make sure Bside is reachable from that host. A loopback URL such as `127.0.0.1` works only when
+Bside and Hermes run on the same host. DeskRPG does not bundle or import Bside; this is MCP wiring
+only. The preset begins untrusted, so write-capable browser tools require confirmation.
+Because the Bside profile is that NPC's personal browser workspace, this connector cannot be copied
+to another NPC; create a separate Bside profile and add the preset there instead.
+
+Then open the same NPC's **Skills** tab, choose **Manage → Add → Bside browser**, and install
+`deskoffice-bside-browser`. It is a profile-local work playbook for the scoped
+`deskoffice_bside_*` MCP tools: health and tab discovery, snapshot/wait/action loops, and the
+human-approval boundary for sensitive actions. It appears in the NPC's Skills menu as a normal
+enabled skill; use its **Use** button (or a skill chip) when assigning browser work.
+
 Now you can hire NPCs. Each NPC is bound to one Hermes profile at hire time, and you can rebind it
 later without firing it.
 

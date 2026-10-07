@@ -4,6 +4,7 @@ import { Plus, Sparkles, X } from "lucide-react";
 
 import { useT } from "@/lib/i18n";
 
+import { BSIDE_BROWSER_SKILL_NAME, bsideBrowserSkillTemplate } from "./bside-browser-skill";
 import CuratorBar from "./CuratorBar";
 import LearningGraph from "./LearningGraph";
 import SkillAddPane from "./SkillAddPane";
@@ -19,7 +20,7 @@ import {
 } from "./skills-view-model";
 
 type Tab = "installed" | "archive" | "graph" | "add";
-type AddMode = "new" | "hub" | "url";
+type AddMode = "new" | "bside" | "hub" | "url";
 type Bulk = { enable: string[]; disable: string[] };
 
 export type SkillManagerModalProps = {
@@ -32,6 +33,8 @@ export type SkillManagerModalProps = {
   api?: SkillsApi;
   /** Opens this employee's 1:1 chat — where reference files get changed now. */
   onAskInChat?(): void;
+  /** Refreshes the already-open NPC Skills tab after the Bside playbook is installed. */
+  onBsideSkillInstalled?(): void;
 };
 
 /**
@@ -47,6 +50,7 @@ export default function SkillManagerModal({
   initialSkill = null,
   api: injected,
   onAskInChat,
+  onBsideSkillInstalled,
 }: SkillManagerModalProps) {
   const t = useT();
   const api = useMemo(
@@ -130,6 +134,16 @@ export default function SkillManagerModal({
       await load();
     });
 
+  const installBsideBrowserSkill = () =>
+    run(async () => {
+      await api.create(BSIDE_BROWSER_SKILL_NAME, "browser", bsideBrowserSkillTemplate());
+      setAddMode(null);
+      setTab("installed");
+      setSelected(BSIDE_BROWSER_SKILL_NAME);
+      await load();
+      onBsideSkillInstalled?.();
+    });
+
   const canManage = view?.canManage ?? false;
   // An older server sends no per-feature switches: then everything follows the single capability.
   const features = view?.features ?? {
@@ -140,8 +154,10 @@ export default function SkillManagerModal({
     graph: view?.capabilityReady ?? false,
   };
   const isOwner = view?.isGatewayOwner ?? canManage;
-  const addModes = (["new", "hub", "url"] as const).filter((m) =>
-    m === "new" ? canManage : isOwner && features.hub,
+  const all = view?.skills ?? [];
+  const bsideSkillInstalled = all.some((skill) => skill.name === BSIDE_BROWSER_SKILL_NAME);
+  const addModes = (["new", "bside", "hub", "url"] as const).filter((m) =>
+    m === "new" || m === "bside" ? canManage : isOwner && features.hub,
   );
   const tabs: Tab[] = [
     "installed",
@@ -149,7 +165,6 @@ export default function SkillManagerModal({
     ...(features.graph ? (["graph"] as const) : []),
     ...(addModes.length > 0 ? (["add"] as const) : []),
   ];
-  const all = view?.skills ?? [];
   const bulkCount = bulk ? bulk.enable.length + bulk.disable.length : 0;
 
   return (
@@ -392,6 +407,32 @@ export default function SkillManagerModal({
                       {t("skills.create.submit")}
                     </button>
                   </div>
+                )}
+                {addMode === "bside" && (
+                  <section
+                    data-bside-skill
+                    className="flex max-w-2xl flex-col gap-3 rounded border border-border bg-surface p-4"
+                  >
+                    <div>
+                      <h3 className="font-semibold text-text">{t("skills.bside.title")}</h3>
+                      <p className="mt-1 text-xs text-text-muted">{t("skills.bside.intro")}</p>
+                    </div>
+                    <p className="rounded bg-surface-raised p-2 font-mono text-xs text-text-muted">
+                      {BSIDE_BROWSER_SKILL_NAME}
+                    </p>
+                    <p className="text-xs text-text-muted">{t("skills.bside.boundary")}</p>
+                    <button
+                      type="button"
+                      data-action="install-bside-skill"
+                      disabled={busy || bsideSkillInstalled}
+                      onClick={() => void installBsideBrowserSkill()}
+                      className="self-start rounded bg-primary px-3 py-1 text-white disabled:opacity-50"
+                    >
+                      {bsideSkillInstalled
+                        ? t("skills.bside.installed")
+                        : t("skills.bside.install")}
+                    </button>
+                  </section>
                 )}
                 {(addMode === "hub" || addMode === "url") && (
                   <SkillAddPane api={api} mode={addMode} onInstalled={() => void load()} />

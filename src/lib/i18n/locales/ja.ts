@@ -3564,6 +3564,7 @@ const ja: Record<string, string> = {
   "skills.tab.graph": "学習マップ",
   "skills.add": "追加",
   "skills.add.new": "新規作成",
+  "skills.add.bside": "Bside ブラウザー",
   "skills.add.hub": "Hub を検索",
   "skills.add.url": "URL",
   "skills.bulk.enableAll": "すべてオン",
@@ -3599,6 +3600,13 @@ const ja: Record<string, string> = {
   "skills.create.name": "名前(英小文字・数字・ハイフン)",
   "skills.create.description": "一行の説明",
   "skills.create.submit": "作成",
+  "skills.bside.title": "Bside 個人ブラウザースキル",
+  "skills.bside.intro":
+    "この NPC がプロファイルに固定された Bside MCP ブラウザーを使うための DeskOffice 手順をインストールします。",
+  "skills.bside.boundary":
+    "NPC の Bside ブラウザー接続後に使います。スコープされたブラウザーツールだけを使い、Bside の人による承認境界を守ります。",
+  "skills.bside.install": "Bside ブラウザースキルをインストール",
+  "skills.bside.installed": "Bside ブラウザースキルをインストール済み",
   "skills.hub.verdict": "スキャン判定: {verdict} · 信頼: {trust}",
   "skills.hub.hasScripts": "実行コード(scripts/)が含まれています",
   "skills.hub.blocked": "Hermes がこのスキルのインストールを拒否しています: {reason}",
@@ -3874,6 +3882,8 @@ const ja: Record<string, string> = {
   "connectors.error.unknown_env_key": "不明な環境変数です: {detail}",
   "connectors.error.catalog_install_failed": "カタログのインストールに失敗しました: {detail}",
   "connectors.error.secret_key_not_referenced": "設定で使われていない秘密値の名前です",
+  "connectors.error.bside_profile_not_copyable":
+    "Bside 個人ブラウザーは一つの NPC に紐付くためコピーできません。別の Bside プロファイルで個別に追加してください。",
   "connectors.error.invalid_name": "その名前は使えません",
   "connectors.error.timeout": "応答がないため中断しました",
   "connectors.error.unreachable": "サーバーに接続できませんでした",
@@ -3932,7 +3942,21 @@ const ja: Record<string, string> = {
   // --- /content-i18n:D ---
   // --- connectors: add · oauth · copy ---
   "connectors.add.tab.catalog": "カタログ",
+  "connectors.add.tab.bside": "Bside ブラウザー",
   "connectors.add.tab.custom": "手動で追加",
+  "connectors.add.bside.title": "この NPC の Bside ブラウザー",
+  "connectors.add.bside.intro":
+    "この NPC 専用の PC・ブラウザーとなる Bside プロファイルを接続します。",
+  "connectors.add.bside.gatewayGuidance":
+    "deskoffice-bside-mcp は Hermes ゲートウェイホストで実行されます。Bside はそのホストから到達可能である必要があり、ループバックアドレスは Bside が同じホストで動く場合だけ使ってください。",
+  "connectors.add.bside.profileId": "Bside プロファイル ID",
+  "connectors.add.bside.profileHint": "このプロファイルが NPC 専用のブラウザー作業領域になります。",
+  "connectors.add.bside.apiUrl": "Bside API URL（任意）",
+  "connectors.add.bside.apiToken": "Bside API トークン（任意）",
+  "connectors.add.bside.untrusted":
+    "このコネクターは未信頼で開始するため、書き込み可能なブラウザーツールは確認を求めます。",
+  "connectors.add.bside.add": "Bside ブラウザーを追加",
+  "connectors.add.bside.adding": "Bside ブラウザーを追加中…",
   "connectors.add.search": "カタログを検索",
   "connectors.add.loading": "カタログを読み込み中…",
   "connectors.add.catalogEmpty": "該当する項目がありません",
@@ -4003,6 +4027,8 @@ const ja: Record<string, string> = {
   "connectors.copy.title": "他のスタッフにコピー",
   "connectors.copy.intro": "「{server}」の設定を受け取るスタッフを選んでください",
   "connectors.copy.noTargets": "このチャンネルにコピーできる他のスタッフがいません",
+  "connectors.copy.bsideBlocked":
+    "Bside 個人ブラウザーはコピーできません。別の NPC 用に専用 Bside プロファイルを作成してから、その NPC でこのコネクターを追加してください。",
   "connectors.copy.notice":
     "秘密の値とログインはコピーされません。受け取ったスタッフは再認証が必要です。",
   "connectors.copy.submit": "コピー",

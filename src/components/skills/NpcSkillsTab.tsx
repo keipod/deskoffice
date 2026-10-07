@@ -17,6 +17,8 @@ export type NpcSkillsTabProps = {
   onOpenManager(skillName?: string): void;
   /** Puts the skill into this NPC's chat input as a chip. Shown only when the gateway can expand chips. */
   onUseSkill?(skillName: string): void;
+  /** Changes after skill management so this still-mounted tab rereads its list. */
+  refreshTick?: number;
   api?: SkillsApi;
 };
 
@@ -30,6 +32,7 @@ export default function NpcSkillsTab({
   npcId,
   onOpenManager,
   onUseSkill,
+  refreshTick = 0,
   api: injected,
 }: NpcSkillsTabProps) {
   const t = useT();
@@ -63,7 +66,7 @@ export default function NpcSkillsTab({
   useEffect(() => {
     setView(null);
     void load();
-  }, [load]);
+  }, [load, refreshTick]);
 
   const toggle = async (row: SkillRow) => {
     setBusy(row.name);

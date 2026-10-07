@@ -3387,6 +3387,7 @@ const zh: Record<string, string> = {
   "skills.tab.graph": "学习关系图",
   "skills.add": "添加",
   "skills.add.new": "新建",
+  "skills.add.bside": "Bside 浏览器",
   "skills.add.hub": "搜索 Hub",
   "skills.add.url": "URL",
   "skills.bulk.enableAll": "全部开启",
@@ -3422,6 +3423,13 @@ const zh: Record<string, string> = {
   "skills.create.name": "名称（小写字母、数字、连字符）",
   "skills.create.description": "一句话说明",
   "skills.create.submit": "创建",
+  "skills.bside.title": "Bside 个人浏览器技能",
+  "skills.bside.intro":
+    "安装 DeskOffice 工作指南，让此 NPC 使用固定到其配置文件的 Bside MCP 浏览器。",
+  "skills.bside.boundary":
+    "连接 NPC 的 Bside 浏览器后再使用。它只使用受限浏览器工具，并保留 Bside 的人工审批边界。",
+  "skills.bside.install": "安装 Bside 浏览器技能",
+  "skills.bside.installed": "已安装 Bside 浏览器技能",
   "skills.hub.verdict": "扫描判定: {verdict} · 信任: {trust}",
   "skills.hub.hasScripts": "包含可执行代码（scripts/）",
   "skills.hub.blocked": "Hermes 阻止安装此技能: {reason}",
@@ -3679,6 +3687,8 @@ const zh: Record<string, string> = {
   "connectors.error.unknown_env_key": "未知的环境变量：{detail}",
   "connectors.error.catalog_install_failed": "目录安装失败：{detail}",
   "connectors.error.secret_key_not_referenced": "设置中未使用该密钥名称",
+  "connectors.error.bside_profile_not_copyable":
+    "Bside 个人浏览器绑定到一个 NPC，不能复制。请使用另一个 Bside 配置文件单独添加它。",
   "connectors.error.invalid_name": "不能使用该名称",
   "connectors.error.timeout": "无响应，已中止",
   "connectors.error.unreachable": "无法连接到服务器",
@@ -3730,7 +3740,19 @@ const zh: Record<string, string> = {
   // --- /content-i18n:D ---
   // --- connectors: add · oauth · copy ---
   "connectors.add.tab.catalog": "目录",
+  "connectors.add.tab.bside": "Bside 浏览器",
   "connectors.add.tab.custom": "手动添加",
+  "connectors.add.bside.title": "此 NPC 的 Bside 浏览器",
+  "connectors.add.bside.intro": "连接作为此 NPC 专属 PC 和浏览器的 Bside 配置文件。",
+  "connectors.add.bside.gatewayGuidance":
+    "deskoffice-bside-mcp 在 Hermes 网关主机上运行。该主机必须能够访问 Bside；只有 Bside 也在同一主机上运行时才使用回环地址。",
+  "connectors.add.bside.profileId": "Bside 配置文件 ID",
+  "connectors.add.bside.profileHint": "此配置文件将成为该 NPC 专用的浏览器工作区。",
+  "connectors.add.bside.apiUrl": "Bside API URL（可选）",
+  "connectors.add.bside.apiToken": "Bside API 令牌（可选）",
+  "connectors.add.bside.untrusted": "此连接器以不受信任状态启动，因此可写浏览器工具需要确认。",
+  "connectors.add.bside.add": "添加 Bside 浏览器",
+  "connectors.add.bside.adding": "正在添加 Bside 浏览器…",
   "connectors.add.search": "搜索目录",
   "connectors.add.loading": "正在加载目录…",
   "connectors.add.catalogEmpty": "没有匹配的条目",
@@ -3798,6 +3820,8 @@ const zh: Record<string, string> = {
   "connectors.copy.title": "复制给其他员工",
   "connectors.copy.intro": "请选择接收“{server}”配置的员工",
   "connectors.copy.noTargets": "此频道中没有可复制的其他员工",
+  "connectors.copy.bsideBlocked":
+    "不能复制 Bside 个人浏览器。请为其他 NPC 创建其专属 Bside 配置文件，然后在该 NPC 处添加此连接器。",
   "connectors.copy.notice": "密钥和登录状态不会复制。接收的员工需要重新认证。",
   "connectors.copy.submit": "复制",
   "connectors.copy.copying": "正在复制…",

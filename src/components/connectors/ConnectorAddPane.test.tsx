@@ -103,6 +103,59 @@ test("installing a catalog entry sends the required env, clears it, and reports 
   assert.ok(!container.querySelector('[name="env-LINEAR_API_KEY"]') || input.value === "");
 });
 
+test("the Bside preset adds an untrusted personal-browser bridge and stores optional values as secrets", async () => {
+  const log = mockFetch({
+    [CATALOG]: catalog,
+    [`POST ${ROOT}/servers`]: view("bside", {
+      transport: "stdio",
+      auth: "env",
+      trust: "untrusted",
+      secrets: [
+        { key: "BSIDE_API_URL", hasValue: false },
+        { key: "BSIDE_API_TOKEN", hasValue: false },
+      ],
+    }),
+    [`PUT ${ROOT}/servers/bside/secrets/BSIDE_API_URL`]: {
+      key: "BSIDE_API_URL",
+      hasValue: true,
+    },
+    [`PUT ${ROOT}/servers/bside/secrets/BSIDE_API_TOKEN`]: {
+      key: "BSIDE_API_TOKEN",
+      hasValue: true,
+    },
+  });
+  await render(pane());
+  await click('[data-tab="bside"]');
+  assert.match($("[data-bside-command]").textContent!, /deskoffice-bside-mcp --profile/);
+  assert.match($("[data-bside-guidance]").textContent!, /Hermes 게이트웨이 호스트/);
+  await type('[name="bside-profile-id"]', "aya-browser");
+  await type('[name="bside-api-url"]', "https://bside.internal.example");
+  const token = $('[name="bside-api-token"]') as HTMLInputElement;
+  assert.equal(token.type, "password");
+  await type('[name="bside-api-token"]', "bside_token");
+  await click('[data-action="bside-install"]');
+
+  const body = log.bodies[`POST ${ROOT}/servers`] as Record<string, unknown>;
+  assert.deepEqual(body, {
+    name: "bside",
+    transport: "stdio",
+    command: "deskoffice-bside-mcp",
+    args: ["--profile", "aya-browser"],
+    env: { BSIDE_API_URL: "", BSIDE_API_TOKEN: "" },
+    auth: "env",
+    trust: "untrusted",
+    confirmName: "bside",
+  });
+  assert.equal(JSON.stringify(body).includes("bside_token"), false);
+  assert.deepEqual(log.bodies[`PUT ${ROOT}/servers/bside/secrets/BSIDE_API_URL`], {
+    value: "https://bside.internal.example",
+  });
+  assert.deepEqual(log.bodies[`PUT ${ROOT}/servers/bside/secrets/BSIDE_API_TOKEN`], {
+    value: "bside_token",
+  });
+  assert.deepEqual(added, ["bside"]);
+});
+
 test("pasting mcpServers JSON on the custom tab fills name, command, and arguments", async () => {
   mockFetch({ [CATALOG]: catalog });
   await render(pane());

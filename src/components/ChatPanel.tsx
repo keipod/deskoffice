@@ -139,6 +139,8 @@ interface ChatPanelProps {
   skillChipRequest?: SkillChipRequest | null;
   /** [Use] on a skill row — the wiring turns it into a tab request and a `skillChipRequest`. */
   onUseSkill?: (npcId: string, skillName: string) => void;
+  /** Advances when skill management changes the active NPC's available skills. */
+  skillsRefreshTick?: number;
   /** "Manage" in the connectors tab — opens that employee's connector manager, optionally on one server. */
   onOpenConnectorManager?: (npcId: string, serverName?: string) => void;
   /** Opens an NPC's unattended run policy modal (from the [Connectors] tab, owner only). */
@@ -255,6 +257,7 @@ export default function ChatPanel({
   skillChipRequest = null,
   // Passed to NpcSkillsTab once that tab takes `onUseSkill` (skills-tab [Use] task).
   onUseSkill,
+  skillsRefreshTick = 0,
   onOpenConnectorManager,
   onOpenApprovalPolicy,
   approvalSocket,
@@ -946,6 +949,7 @@ export default function ChatPanel({
                   onUseSkill={
                     onUseSkill ? (skillName) => onUseSkill(dialogNpc!.npcId, skillName) : undefined
                   }
+                  refreshTick={skillsRefreshTick}
                 />
               </div>
             ) : cron && npcTab === "cards" ? (

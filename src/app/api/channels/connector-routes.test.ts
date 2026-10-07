@@ -315,6 +315,29 @@ test("copy carries settings but no secret values and reports per-target results"
   assert.equal(copied.view.enabled, false);
 });
 
+test("copy refuses a Bside personal browser so each NPC keeps its own profile", async () => {
+  const s = await seed();
+  const targetMcp = server.mcp("max");
+  targetMcp.lastCreateBody = null;
+  server.mcp("sophie").seed("bside", {
+    entry: {
+      command: "deskoffice-bside-mcp",
+      args: ["--profile", "sophie-browser"],
+      trust: "untrusted",
+    },
+  });
+  const res = await call(s.owner.id, "POST", s.channel.id, s.npc.id, ["copy"], {
+    targetNpcIds: [s.npc2.id],
+    names: ["bside"],
+  });
+  assert.equal(res.status, 200);
+  assert.deepEqual((await res.json()).results, [
+    { npcId: s.npc2.id, name: "bside", ok: false, code: "bside_profile_not_copyable" },
+  ]);
+  assert.equal(targetMcp.servers.has("bside"), false);
+  assert.equal(targetMcp.lastCreateBody, null);
+});
+
 test("responses never contain the profile key", async () => {
   const s = await seed();
   server.mcp("sophie").seed("github");

@@ -3532,6 +3532,7 @@ const en: Record<string, string> = {
   "skills.tab.graph": "Learning map",
   "skills.add": "Add",
   "skills.add.new": "New",
+  "skills.add.bside": "Bside browser",
   "skills.add.hub": "Search Hub",
   "skills.add.url": "URL",
   "skills.bulk.enableAll": "Enable all",
@@ -3567,6 +3568,13 @@ const en: Record<string, string> = {
   "skills.create.name": "Name (lowercase letters, digits, hyphens)",
   "skills.create.description": "One-line description",
   "skills.create.submit": "Create",
+  "skills.bside.title": "Bside personal browser skill",
+  "skills.bside.intro":
+    "Install the DeskOffice playbook that teaches this NPC to use its profile-pinned Bside MCP browser.",
+  "skills.bside.boundary":
+    "Use this after connecting the NPC's Bside browser. It uses only scoped browser tools and preserves Bside's human approval boundary.",
+  "skills.bside.install": "Install Bside browser skill",
+  "skills.bside.installed": "Bside browser skill installed",
   "skills.hub.verdict": "Scan verdict: {verdict} · Trust: {trust}",
   "skills.hub.hasScripts": "Contains executable code (scripts/)",
   "skills.hub.blocked": "Hermes blocks installing this skill: {reason}",
@@ -3842,6 +3850,8 @@ const en: Record<string, string> = {
   "connectors.error.unknown_env_key": "Unknown environment variable: {detail}",
   "connectors.error.catalog_install_failed": "Catalog install failed: {detail}",
   "connectors.error.secret_key_not_referenced": "The settings don't use that secret name",
+  "connectors.error.bside_profile_not_copyable":
+    "A Bside personal browser is bound to one NPC and cannot be copied. Add it separately with another Bside profile.",
   "connectors.error.invalid_name": "That name can't be used",
   "connectors.error.timeout": "No response, so it was stopped",
   "connectors.error.unreachable": "Couldn't reach the server",
@@ -3901,7 +3911,21 @@ const en: Record<string, string> = {
   // --- /content-i18n:D ---
   // --- connectors: add · oauth · copy ---
   "connectors.add.tab.catalog": "Catalog",
+  "connectors.add.tab.bside": "Bside browser",
   "connectors.add.tab.custom": "Add manually",
+  "connectors.add.bside.title": "Bside browser for this NPC",
+  "connectors.add.bside.intro":
+    "Connect the Bside profile that acts as this NPC's personal PC and browser.",
+  "connectors.add.bside.gatewayGuidance":
+    "deskoffice-bside-mcp runs on the Hermes gateway host. Bside must be reachable from that host; use a loopback address only when Bside runs on the same host.",
+  "connectors.add.bside.profileId": "Bside profile ID",
+  "connectors.add.bside.profileHint": "This profile becomes the NPC's dedicated browser workspace.",
+  "connectors.add.bside.apiUrl": "Bside API URL (optional)",
+  "connectors.add.bside.apiToken": "Bside API token (optional)",
+  "connectors.add.bside.untrusted":
+    "This connector starts untrusted, so write-capable browser tools require confirmation.",
+  "connectors.add.bside.add": "Add Bside browser",
+  "connectors.add.bside.adding": "Adding Bside browser…",
   "connectors.add.search": "Search the catalog",
   "connectors.add.loading": "Loading the catalog…",
   "connectors.add.catalogEmpty": "No matching entries",
@@ -3973,6 +3997,8 @@ const en: Record<string, string> = {
   "connectors.copy.title": "Copy to other staff",
   "connectors.copy.intro": 'Pick who receives the "{server}" settings',
   "connectors.copy.noTargets": "No other staff in this channel to copy to",
+  "connectors.copy.bsideBlocked":
+    "A Bside personal browser cannot be copied. Give the other NPC its own Bside profile, then add this connector there.",
   "connectors.copy.notice":
     "Secrets and sign-ins are not copied. Each recipient must authenticate again.",
   "connectors.copy.submit": "Copy",

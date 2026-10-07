@@ -5,7 +5,15 @@ import type { McpServerDetail } from "@/lib/hermes/plugin-client-types";
 
 import ConnectorCopyPane from "./ConnectorCopyPane";
 import { createConnectorsApi } from "./connectors-api";
-import { $, cleanup, click, mockFetch, render, text } from "../skills/skills-test-harness";
+import {
+  $,
+  cleanup,
+  click,
+  container,
+  mockFetch,
+  render,
+  text,
+} from "../skills/skills-test-harness";
 
 const ROOT = "/api/channels/ch-1/npcs/n-1/connectors";
 
@@ -119,6 +127,23 @@ test("a stdio server shows its command and needs a confirmation before copying",
   assert.equal(copyButton().disabled, false);
   await click('[data-action="copy"]');
   assert.ok(log.calls.includes(`POST ${ROOT}/copy`));
+});
+
+test("a Bside personal browser cannot be copied to another NPC", async () => {
+  const log = mockFetch({
+    [`GET ${ROOT}/servers/bside`]: detail({
+      name: "bside",
+      transport: "stdio",
+      command: "deskoffice-bside-mcp",
+      args: ["--profile", "maya-browser"],
+      url: null,
+    }),
+  });
+  await render(pane("bside"));
+  assert.ok($("[data-bside-copy-blocked]").textContent?.includes("Bside 개인 브라우저"));
+  assert.equal(copyButton().disabled, true);
+  assert.equal(container.querySelectorAll("[data-target]").length, 0);
+  assert.ok(!log.calls.includes(`POST ${ROOT}/copy`));
 });
 
 test("a failed copy call shows an error and no results", async () => {

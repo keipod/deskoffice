@@ -8,6 +8,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import type { CopyResult } from "@/components/connectors/connector-types";
+import { isDeskOfficeBsideBridge } from "@/lib/bside-mcp";
 import {
   resolveConnectorContext,
   requireMcpCapability,
@@ -67,13 +68,25 @@ type CopySource = {
   disabled: boolean;
 };
 
+const BSIDE_PROFILE_NOT_COPYABLE = "bside_profile_not_copyable";
+
 async function copy(c: ConnectorContext, a: HandlerArgs): Promise<Response> {
   const names = [...new Set(strList(a.body.names))];
   const targets = [...new Set(strList(a.body.targetNpcIds))].filter((id) => id !== c.npcId);
   const exported = new Map<string, CopySource | { code: string }>();
   for (const name of names) {
     const res = await c.client.mcp.exportServer(name);
-    exported.set(name, res.ok ? toCopySource(name, res.data.entry) : { code: res.failure.code });
+    if (!res.ok) {
+      exported.set(name, { code: res.failure.code });
+      continue;
+    }
+    const entry = res.data.entry;
+    exported.set(
+      name,
+      isDeskOfficeBsideBridge(entry.command, entry.args)
+        ? { code: BSIDE_PROFILE_NOT_COPYABLE }
+        : toCopySource(name, entry),
+    );
   }
   const results: CopyResult[] = [];
   for (const npcId of targets) {
