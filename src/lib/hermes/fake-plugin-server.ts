@@ -48,6 +48,7 @@ import {
   routeApprovalPolicy,
   type FakeApprovalPolicyState,
 } from "./fake-approval-policy-routes";
+import { createFakeConfigState, routeConfig, type FakeConfigState } from "./fake-config-routes";
 import { createFakeMcpState, routeMcp, type FakeMcpState } from "./fake-mcp-routes";
 import {
   createFakeAskUserState,
@@ -164,6 +165,8 @@ export type FakePluginServer = {
   }): { id: string };
   /** That profile's 0.15.0 skill management state (`fake-skill-routes.ts`). Creates an empty state if absent. */
   skills(profile: string): FakeSkillState;
+  /** That profile's `config`/`toolsets` state (`fake-config-routes.ts`). Creates the default if absent. */
+  config(profile: string): FakeConfigState;
   /** That profile's 0.17.0 MCP connector state (`fake-mcp-routes.ts`). Creates an empty state if absent. */
   mcp(profile: string): FakeMcpState;
   /** That profile's 0.18.0 approval policy state (`fake-approval-policy-routes.ts`). Creates a default if absent. */
@@ -289,6 +292,7 @@ export async function startFakePluginServer(
   let boardDefaults = new Map<string, { mode: string; reviewer_profile: string | null }>();
   let skillStates = new Map<string, FakeSkillState>();
   let mcpStates = new Map<string, FakeMcpState>();
+  let configStates = new Map<string, FakeConfigState>();
   let approvalPolicyStates = new Map<string, FakeApprovalPolicyState>();
   let sessionSources = new Map<string, SessionSources>();
   let askUserStates = new Map<string, FakeAskUserState>();
@@ -310,6 +314,7 @@ export async function startFakePluginServer(
     boardDefaults = new Map();
     skillStates = new Map();
     mcpStates = new Map();
+    configStates = new Map();
     approvalPolicyStates = new Map();
     sessionSources = new Map();
     askUserStates = new Map();
@@ -321,6 +326,15 @@ export async function startFakePluginServer(
     if (!state) {
       state = createFakeSkillState();
       skillStates.set(profile, state);
+    }
+    return state;
+  }
+
+  function configFor(profile: string): FakeConfigState {
+    let state = configStates.get(profile);
+    if (!state) {
+      state = createFakeConfigState();
+      configStates.set(profile, state);
     }
     return state;
   }
@@ -1868,6 +1882,8 @@ export async function startFakePluginServer(
     if (skillReply) return skillReply;
     const mcpReply = routeMcp(mcpFor(profile), req);
     if (mcpReply) return mcpReply;
+    const configReply = routeConfig(configFor(profile), req);
+    if (configReply) return configReply;
     const policyReply = routeApprovalPolicy(approvalPolicyFor(profile), req);
     if (policyReply) return policyReply;
     const sourcesMatch = /^\/deskrpg\/sessions\/([^/]+)\/sources$/.exec(req.pathname);
@@ -2090,6 +2106,7 @@ export async function startFakePluginServer(
     },
     skills: skillsFor,
     mcp: mcpFor,
+    config: configFor,
     approvalPolicy: approvalPolicyFor,
     setSessionSources: (profile, sessionId, body) => {
       if (body) sessionSources.set(`${profile}|${sessionId}`, body);

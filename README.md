@@ -272,10 +272,13 @@ bundle or import Bside.
 
 That one click creates (or reuses) the Bside profile, adds an HTTP connector named `bside` pointing at
 `<Bside URL>/mcp/agent/<profile ID>` (no token, full trust), and installs the
-`deskoffice-bside-browser` skill. Repeating it is safe: an existing Bside connector is repointed and
-an installed skill is left alone. If the skill cannot be installed on this gateway, the connector is
+`deskoffice-bside-browser` skill. Repeating it is safe: an existing Bside connector is repointed, and
+an installed skill is rewritten only when DeskOffice authored it at a lower version than the current
+playbook; to keep your own edits, raise the skill's `version` or change its `author`. If the skill cannot be installed on this gateway, the connector is
 still added and the pane says so; install the skill later from **Skills → Manage → Add → Bside
-browser**.
+browser**. Connect also turns off the NPC's built-in headless browser toolset so browser work goes
+through Bside; re-enable it from the NPC's toolset settings if you want it back. Like saving the
+toolset picker, this writes the same toolset list for chat, cron and kanban workers.
 
 **Reaching Bside.** Both DeskRPG's server (to list profiles) and Hermes (to call the MCP endpoint)
 must reach the Bside URL. The default is `http://host.docker.internal:27433`, which Docker Desktop

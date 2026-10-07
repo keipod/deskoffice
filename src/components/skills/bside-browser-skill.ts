@@ -9,12 +9,16 @@ export const BSIDE_BROWSER_SKILL_NAME = "deskoffice-bside-browser";
 export const BSIDE_BROWSER_SKILL_DESCRIPTION =
   "Browse and manage SNS accounts in your own Bside browser.";
 
+/** Raise it when the playbook changes: reconnecting rewrites an installed copy only when this is higher. */
+export const BSIDE_BROWSER_SKILL_VERSION = "1.1.0";
+export const BSIDE_BROWSER_SKILL_AUTHOR = "DeskOffice";
+
 export function bsideBrowserSkillTemplate(): string {
   return `---
 name: ${BSIDE_BROWSER_SKILL_NAME}
 description: ${BSIDE_BROWSER_SKILL_DESCRIPTION}
-version: 1.0.0
-author: DeskOffice
+version: ${BSIDE_BROWSER_SKILL_VERSION}
+author: ${BSIDE_BROWSER_SKILL_AUTHOR}
 license: MIT
 metadata:
   hermes:
@@ -26,9 +30,15 @@ metadata:
 
 ## When to Use
 
+**Rule: for any browser work (opening, reading or driving web pages), use only the \`deskoffice_bside_*\` tools. They are this employee's real, logged-in browser. Never use any other browser tool. \`web_search\` stays fine for plain lookups.**
+
+If the \`deskoffice_bside_*\` tools are not listed directly, they are deferred: find them with \`tool_search\`, read their schemas with \`tool_describe\` (pass the names), then run them with \`tool_call\` using \`{calls:[{name, arguments}]}\`.
+
 Any task that needs a real, logged-in browser: checking or posting on YouTube, Instagram or Threads, reading comments and analytics, replying, researching pages, or anything a person would do by hand in a browser.
 
 The \`bside\` MCP server is this employee's own PC/browser. It is pinned to one Bside profile: the logged-in accounts, cookies and history belong to this employee only. Other employees use other profiles, so several of you can work at the same time.
+
+Hermes names these tools \`mcp__bside__deskoffice_bside_<name>\` (search for "bside"). Never claim a page result you did not get from a tool call.
 
 ## Start
 

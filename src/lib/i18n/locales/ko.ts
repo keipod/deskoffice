@@ -3935,6 +3935,14 @@ const ko: Record<string, string> = {
   "connectors.add.bside.connected": "Bside 프로필 {profile} 에 연결했습니다.",
   "connectors.add.bside.skillFailed":
     "브라우저 스킬을 설치하지 못했습니다({code}). 스킬 → 추가 → Bside 브라우저에서 직접 설치하세요.",
+  "connectors.add.bside.builtinBrowserOff":
+    "이 직원의 내장 브라우저 도구를 껐습니다 — 브라우저 작업은 Bside로 합니다.",
+  "connectors.add.bside.builtinBrowserFailed":
+    "내장 브라우저 도구를 끄지 못했습니다({code}). 직원의 도구 설정에서 브라우저 도구 세트를 꺼야 Bside로 작업합니다.",
+  "connectors.add.bside.builtinBrowserRestart": "다음 대화부터 적용됩니다.",
+  "connectors.add.bside.skillUpdated": "브라우저 스킬을 최신 버전으로 갱신했습니다.",
+  "connectors.add.bside.skillRefreshFailed":
+    "브라우저 스킬을 갱신하지 못했습니다({code}). 설치된 스킬은 그대로 두었습니다.",
   "connectors.add.bside.continue": "계속",
   "connectors.add.search": "카탈로그 검색",
   "connectors.add.loading": "카탈로그를 불러오는 중…",

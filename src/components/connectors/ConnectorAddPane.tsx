@@ -226,8 +226,16 @@ export default function ConnectorAddPane({
           : { profileId: bsidePick }),
       });
       if (!alive.current) return;
-      // A skill that did not install is worth reading before the manager moves on.
-      if (result.skill.ok) finish(result.connector);
+      // A skill that did not install, or a built-in browser that was just turned off or could
+      // not be, is worth reading before the manager moves on.
+      const { builtinBrowser } = result;
+      if (
+        result.skill.ok &&
+        !result.skill.updated &&
+        builtinBrowser.disabled &&
+        builtinBrowser.alreadyDisabled
+      )
+        finish(result.connector);
       else setBsideResult(result);
     } catch (e) {
       if (alive.current) setError(connectorErrorText(t, e));
@@ -494,10 +502,38 @@ export default function ConnectorAddPane({
             {t("connectors.add.bside.connected", { profile: bsideResult.profile.name })}
           </p>
           <p className="break-all font-mono text-text-dim">{bsideResult.mcpUrl}</p>
-          <p data-bside-skill-warning className="flex items-start gap-1 text-danger">
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            {t("connectors.add.bside.skillFailed", { code: bsideResult.skill.code ?? "" })}
-          </p>
+          {bsideResult.skill.updated && (
+            <p data-bside-skill-updated className="text-text-muted">
+              {t("connectors.add.bside.skillUpdated")}
+            </p>
+          )}
+          {!bsideResult.skill.ok && (
+            <p data-bside-skill-warning className="flex items-start gap-1 text-danger">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {t(
+                bsideResult.skill.alreadyInstalled
+                  ? "connectors.add.bside.skillRefreshFailed"
+                  : "connectors.add.bside.skillFailed",
+                { code: bsideResult.skill.code ?? "" },
+              )}
+            </p>
+          )}
+          {!bsideResult.builtinBrowser.disabled ? (
+            <p data-bside-browser-warning className="flex items-start gap-1 text-danger">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              {t("connectors.add.bside.builtinBrowserFailed", {
+                code: bsideResult.builtinBrowser.code ?? "",
+              })}
+            </p>
+          ) : (
+            !bsideResult.builtinBrowser.alreadyDisabled && (
+              <p data-bside-browser-disabled className="text-text-muted">
+                {t("connectors.add.bside.builtinBrowserOff")}
+                {bsideResult.builtinBrowser.restartMayBeRequired &&
+                  ` ${t("connectors.add.bside.builtinBrowserRestart")}`}
+              </p>
+            )
+          )}
           <button
             type="button"
             data-action="bside-continue"

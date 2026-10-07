@@ -62,6 +62,13 @@ test("Bside browser skill is a profile-pinned SNS browsing playbook", () => {
   ]) {
     assert.ok(skill.includes(`\`${workflow}\``), workflow);
   }
+  assert.match(skill, /\nversion: 1\.1\.0\nauthor: DeskOffice\n/);
+  assert.match(skill, /use only the `deskoffice_bside_\*` tools/);
+  assert.match(skill, /`web_search` stays fine/);
+  assert.match(
+    skill,
+    /`tool_search`.*`tool_describe`.*`tool_call`.*\{calls:\[\{name, arguments\}\]\}/,
+  );
   assert.match(skill, /sensitive: true/);
   assert.match(skill, /human approval/);
 });

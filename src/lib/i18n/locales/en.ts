@@ -3943,6 +3943,14 @@ const en: Record<string, string> = {
   "connectors.add.bside.connected": "Connected to Bside profile {profile}.",
   "connectors.add.bside.skillFailed":
     "The browser skill could not be installed ({code}). Install it from Skills → Add → Bside browser.",
+  "connectors.add.bside.builtinBrowserOff":
+    "This NPC's built-in browser tools are now off — browser work goes through Bside.",
+  "connectors.add.bside.builtinBrowserFailed":
+    "The built-in browser tools could not be turned off ({code}). Turn off the browser toolset in this NPC's toolset settings so it works in Bside.",
+  "connectors.add.bside.builtinBrowserRestart": "It applies from the next conversation.",
+  "connectors.add.bside.skillUpdated": "The browser skill was updated to the latest version.",
+  "connectors.add.bside.skillRefreshFailed":
+    "The browser skill could not be refreshed ({code}). The installed copy was left as it is.",
   "connectors.add.bside.continue": "Continue",
   "connectors.add.search": "Search the catalog",
   "connectors.add.loading": "Loading the catalog…",

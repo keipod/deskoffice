@@ -13,6 +13,8 @@ import {
   seedUser,
   setupThrowawaySqlite,
 } from "@/test-setup/npc-seed";
+import { bsideBrowserSkillTemplate } from "@/components/skills/bside-browser-skill";
+import { effectiveEnabled } from "@/lib/hermes/fake-config-routes";
 import { startFakePluginServer, type FakePluginServer } from "@/lib/hermes/fake-plugin-server";
 
 // NPC MCP connector REST (`/api/channels/:id/npcs/:npcId/connectors/**`).
@@ -481,6 +483,76 @@ test("bside/connect creates the profile, the HTTP connector, and the skill; repe
   }
 });
 
+const SKILL = "deskoffice-bside-browser";
+const olderPlaybook = () => bsideBrowserSkillTemplate().replace(/^version: .*$/m, "version: 1.0.0");
+
+async function connectWithInstalledSkill(
+  s: Awaited<ReturnType<typeof seed>>,
+  bsideUrl: string,
+  skillMd: string | null,
+) {
+  const skills = server.skills("sophie");
+  skills.seed(SKILL);
+  if (skillMd === null) skills.skills.get(SKILL)!.files.delete("SKILL.md");
+  else skills.skills.get(SKILL)!.files.set("SKILL.md", skillMd);
+  try {
+    const { body } = await connectBside(s, bsideUrl);
+    return { skill: body.skill, file: skills.skills.get(SKILL)!.files.get("SKILL.md") };
+  } finally {
+    skills.skills.delete(SKILL);
+  }
+}
+
+test("bside/connect updates an installed DeskOffice playbook with a lower version", async () => {
+  const s = await seed();
+  const bside = await startFakeBside();
+  try {
+    const out = await connectWithInstalledSkill(s, bside.url, olderPlaybook());
+    assert.deepEqual(out.skill, { ok: true, alreadyInstalled: true, updated: true });
+    assert.equal(out.file, bsideBrowserSkillTemplate());
+  } finally {
+    bside.close();
+  }
+});
+
+test("bside/connect leaves an installed playbook alone when the version is current, newer, or not DeskOffice's", async () => {
+  const s = await seed();
+  const bside = await startFakeBside();
+  try {
+    const edited = `${bsideBrowserSkillTemplate()}\nMy own rule.\n`;
+    const newer = bsideBrowserSkillTemplate().replace(/^version: .*$/m, "version: 1.10.0");
+    const foreign = olderPlaybook().replace(/^author: .*$/m, "author: someone");
+    const unversioned = olderPlaybook().replace(/^version: .*\n/m, "");
+    for (const md of [edited, newer, foreign, unversioned]) {
+      const out = await connectWithInstalledSkill(s, bside.url, md);
+      assert.deepEqual(out.skill, { ok: true, alreadyInstalled: true });
+      assert.equal(out.file, md);
+    }
+  } finally {
+    bside.close();
+  }
+});
+
+test("bside/connect reports a playbook that changed during the refresh, and one it cannot read", async () => {
+  const s = await seed();
+  const bside = await startFakeBside();
+  try {
+    server.skills("sophie").racingWrite = "---\nauthor: DeskOffice\nversion: 1.0.1\n---\nedited\n";
+    const raced = await connectWithInstalledSkill(s, bside.url, olderPlaybook());
+    assert.deepEqual(raced.skill, { ok: false, code: "skill_changed", alreadyInstalled: true });
+    assert.equal(raced.file, "---\nauthor: DeskOffice\nversion: 1.0.1\n---\nedited\n");
+
+    const unreadable = await connectWithInstalledSkill(s, bside.url, null);
+    assert.deepEqual(unreadable.skill, {
+      ok: false,
+      code: "file_not_found",
+      alreadyInstalled: true,
+    });
+  } finally {
+    bside.close();
+  }
+});
+
 test("bside/connect repoints an older Bside connector and refuses an unrelated `bside` server", async () => {
   const s = await seed();
   const bside = await startFakeBside();
@@ -612,6 +684,109 @@ test("bside/connect needs a profile id or a new profile name", async () => {
     assert.equal((await res.json()).code, "bside_profile_required");
     assert.equal(bside.origins.length, 0);
   } finally {
+    bside.close();
+  }
+});
+
+async function connectBside(s: Awaited<ReturnType<typeof seed>>, bsideUrl: string) {
+  const res = await call(s.owner.id, "POST", s.channel.id, s.npc.id, ["bside", "connect"], {
+    baseUrl: bsideUrl,
+    profileId: "sophie",
+  });
+  return { res, body: await res.json() };
+}
+
+test("bside/connect turns off only the built-in browser toolset", async () => {
+  const s = await seed();
+  const bside = await startFakeBside();
+  const cfg = server.config("sophie");
+  try {
+    server.mcp("sophie").servers.delete("bside");
+    Object.assign(cfg, { enabled: [...cfg.known, "my-mcp"], pluginsRecorded: false, puts: [] });
+    const { res, body } = await connectBside(s, bside.url);
+    assert.equal(res.status, 200);
+    assert.deepEqual(body.builtinBrowser, { disabled: true, restartMayBeRequired: true });
+    assert.equal(cfg.puts.length, 1);
+    assert.deepEqual(cfg.puts[0], {
+      enabledToolsets: [...cfg.known.filter((n) => n !== "browser"), "deskrpg"],
+    });
+    assert.ok(!cfg.enabled.includes("browser"));
+    assert.ok(cfg.enabled.includes("computer_use"));
+    assert.ok(cfg.enabled.includes("my-mcp"), "MCP entries are kept");
+  } finally {
+    bside.close();
+  }
+});
+
+test("bside/connect keeps a plugin toolset that is on by default but not in the stored list", async () => {
+  const s = await seed();
+  const bside = await startFakeBside();
+  const cfg = server.config("sophie");
+  try {
+    server.mcp("sophie").servers.delete("bside");
+    Object.assign(cfg, { enabled: [...cfg.known], pluginsRecorded: false, puts: [] });
+    assert.ok(!cfg.enabled.includes("deskrpg"));
+    assert.ok(effectiveEnabled(cfg).includes("deskrpg"));
+    await connectBside(s, bside.url);
+    assert.deepEqual(
+      effectiveEnabled(cfg),
+      [...cfg.known.filter((n) => n !== "browser"), "deskrpg"],
+      "only the browser went off",
+    );
+  } finally {
+    bside.close();
+  }
+});
+
+test("bside/connect leaves a profile whose browser is already off alone, on a repeat too", async () => {
+  const s = await seed();
+  const bside = await startFakeBside();
+  const cfg = server.config("sophie");
+  try {
+    server.mcp("sophie").servers.delete("bside");
+    Object.assign(cfg, {
+      enabled: cfg.known.filter((n) => n !== "browser"),
+      pluginsRecorded: true,
+      puts: [],
+    });
+    const first = await connectBside(s, bside.url);
+    assert.equal(first.body.alreadyConnected, false);
+    assert.deepEqual(first.body.builtinBrowser, { disabled: true, alreadyDisabled: true });
+    const again = await connectBside(s, bside.url);
+    assert.equal(again.body.alreadyConnected, true);
+    assert.deepEqual(again.body.builtinBrowser, { disabled: true, alreadyDisabled: true });
+    assert.equal(cfg.puts.length, 0);
+  } finally {
+    bside.close();
+  }
+});
+
+test("bside/connect still connects when the toolsets cannot be read or written", async () => {
+  const s = await seed();
+  const bside = await startFakeBside();
+  const cfg = server.config("sophie");
+  try {
+    server.mcp("sophie").servers.delete("bside");
+    Object.assign(cfg, {
+      enabled: [...cfg.known],
+      pluginsRecorded: false,
+      puts: [],
+      rejectPuts: false,
+    });
+    server.failNext("/p/sophie/deskrpg/toolsets", 1);
+    const read = await connectBside(s, bside.url);
+    assert.equal(read.res.status, 200);
+    assert.equal(read.body.connector.name, "bside");
+    assert.deepEqual(read.body.builtinBrowser, { disabled: false, code: "service_unavailable" });
+    assert.ok(cfg.enabled.includes("browser"));
+
+    cfg.rejectPuts = true;
+    const write = await connectBside(s, bside.url);
+    assert.equal(write.res.status, 200);
+    assert.deepEqual(write.body.builtinBrowser, { disabled: false, code: "config_unreadable" });
+    assert.ok(cfg.enabled.includes("browser"));
+  } finally {
+    cfg.rejectPuts = false;
     bside.close();
   }
 });

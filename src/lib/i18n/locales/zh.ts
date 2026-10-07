@@ -3771,6 +3771,13 @@ const zh: Record<string, string> = {
   "connectors.add.bside.connected": "已连接到 Bside 配置文件 {profile}。",
   "connectors.add.bside.skillFailed":
     "无法安装浏览器技能（{code}）。请在 技能 → 添加 → Bside 浏览器 中安装。",
+  "connectors.add.bside.builtinBrowserOff":
+    "已关闭该员工的内置浏览器工具，浏览器操作将通过 Bside 进行。",
+  "connectors.add.bside.builtinBrowserFailed":
+    "无法关闭内置浏览器工具（{code}）。请在该员工的工具集设置中关闭浏览器工具集，以便使用 Bside 工作。",
+  "connectors.add.bside.builtinBrowserRestart": "将从下一次对话开始生效。",
+  "connectors.add.bside.skillUpdated": "已将浏览器技能更新到最新版本。",
+  "connectors.add.bside.skillRefreshFailed": "无法更新浏览器技能（{code}）。已保留当前安装的版本。",
   "connectors.add.bside.continue": "继续",
   "connectors.add.search": "搜索目录",
   "connectors.add.loading": "正在加载目录…",

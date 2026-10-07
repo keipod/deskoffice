@@ -34,6 +34,8 @@ export type FakeSkillState = {
   /** 0.31.0 `skill-invocation`: the bodies received, and an optional scripted failure for the next call. */
   invocations: { skills: string[]; instruction: string }[];
   invocationFailure: { status: number; error: string } | null;
+  /** When set, the next file PUT finds SKILL.md-style content changed under it (someone else saved first). */
+  racingWrite: string | null;
   seed(
     name: string,
     opts?: { source?: FakeSkill["source"]; files?: Record<string, string>; useCount?: number },
@@ -65,6 +67,7 @@ export function createFakeSkillState(): FakeSkillState {
     lastActor: null,
     invocations: [],
     invocationFailure: null,
+    racingWrite: null,
     seed(name, opts = {}) {
       const files = new Map<string, string>([
         ["SKILL.md", `---\nname: ${name}\ndescription: ${name}\n---\n# ${name}\n`],
@@ -341,6 +344,10 @@ function routeSkillArea(
     }
     if (method !== "PUT") return err(404, "not_found");
     if (!editable(s, path)) return err(403, "path_not_editable");
+    if (state.racingWrite !== null) {
+      s.files.set(path, state.racingWrite);
+      state.racingWrite = null;
+    }
     const cur = s.files.get(path);
     // A new file has baseHash null — conflict if it already exists. An existing file must match the current hash.
     if (body.baseHash === null) {

@@ -26,7 +26,14 @@ export type BsideConnectResult = {
   connector: McpServerView;
   mcpUrl: string;
   alreadyConnected: boolean;
-  skill: { ok: boolean; code?: string; alreadyInstalled?: boolean };
+  skill: { ok: boolean; code?: string; alreadyInstalled?: boolean; updated?: boolean };
+  /** Whether the NPC's built-in headless `browser` toolset was turned off (or already was). */
+  builtinBrowser: {
+    disabled: boolean;
+    alreadyDisabled?: boolean;
+    code?: string;
+    restartMayBeRequired?: true;
+  };
 };
 
 /** Server/plugin error codes that have their own on-screen message (`connectors.error.<code>`). */

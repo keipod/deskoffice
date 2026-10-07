@@ -837,8 +837,17 @@ export type AskUserApi = {
   answer(questionId: string, response: string): Promise<PluginResponse<{ answered: true }>>;
 };
 
+/** `/p/{profile}/deskrpg/config` and `/toolsets` with the profile's own key. */
+export type ProfileConfigApi = {
+  get(): Promise<PluginResponse<Record<string, unknown>>>;
+  put(patch: Record<string, unknown>): Promise<PluginResponse<Record<string, unknown>>>;
+  toolsets(): Promise<PluginResponse<ToolsetsPayload>>;
+};
+
 export type ProfilePluginClient = {
   profileName: string;
+  /** Model, toolset and skill settings of this profile. */
+  config: ProfileConfigApi;
   cron: CronApi;
   /** 0.15.0 `profile_skill_admin` — with an old plugin the call comes back 404. */
   skills: SkillAdminApi;

@@ -112,6 +112,7 @@ const CONNECT = `POST ${ROOT}/bside/connect`;
 const connected = (
   profile: { id: string; name: string },
   skill: Record<string, unknown> = { ok: true },
+  builtinBrowser: Record<string, unknown> = { disabled: true, alreadyDisabled: true },
 ) => ({
   profile,
   connector: view("bside", {
@@ -120,6 +121,7 @@ const connected = (
   mcpUrl: `${BSIDE_URL}/mcp/agent/${profile.id}`,
   alreadyConnected: false,
   skill,
+  builtinBrowser,
 });
 
 async function choose(sel: string, value: string) {
@@ -213,6 +215,100 @@ test("a skill that failed to install is shown before moving on", async () => {
   assert.deepEqual(added, []);
   assert.match($("[data-bside-skill-warning]").textContent!, /skill_feature_unavailable/);
   assert.ok($("[data-bside-result]").textContent!.includes(`${BSIDE_URL}/mcp/agent/aya`));
+  await click('[data-action="bside-continue"]');
+  assert.deepEqual(added, ["bside"]);
+});
+
+test("turning off the built-in browser is announced before moving on", async () => {
+  mockFetch({
+    [CATALOG]: catalog,
+    [PROFILES]: { baseUrl: BSIDE_URL, profiles: [{ id: "aya", name: "Aya" }] },
+    [CONNECT]: connected({ id: "aya", name: "Aya" }, { ok: true }, { disabled: true }),
+  });
+  await render(pane("Aya"));
+  await click('[data-tab="bside"]');
+  await click('[data-action="bside-connect"]');
+  assert.deepEqual(added, []);
+  assert.ok($("[data-bside-browser-disabled]").textContent!.includes("Bside"));
+  assert.ok(!container.querySelector("[data-bside-browser-warning]"));
+  assert.ok(!container.querySelector("[data-bside-skill-warning]"));
+  await click('[data-action="bside-continue"]');
+  assert.deepEqual(added, ["bside"]);
+});
+
+test("the built-in browser note says when it applies, and stays hidden if it was already off", async () => {
+  mockFetch({
+    [CATALOG]: catalog,
+    [PROFILES]: { baseUrl: BSIDE_URL, profiles: [{ id: "aya", name: "Aya" }] },
+    [CONNECT]: connected(
+      { id: "aya", name: "Aya" },
+      { ok: true, alreadyInstalled: true, updated: true },
+      { disabled: true, alreadyDisabled: true },
+    ),
+  });
+  await render(pane("Aya"));
+  await click('[data-tab="bside"]');
+  await click('[data-action="bside-connect"]');
+  assert.deepEqual(added, []);
+  assert.ok($("[data-bside-skill-updated]"));
+  assert.ok(!container.querySelector("[data-bside-browser-disabled]"));
+  assert.ok(!container.querySelector("[data-bside-skill-warning]"));
+});
+
+test("a restart-pending toggle of the built-in browser says it applies from the next conversation", async () => {
+  mockFetch({
+    [CATALOG]: catalog,
+    [PROFILES]: { baseUrl: BSIDE_URL, profiles: [{ id: "aya", name: "Aya" }] },
+    [CONNECT]: connected(
+      { id: "aya", name: "Aya" },
+      { ok: true },
+      { disabled: true, restartMayBeRequired: true },
+    ),
+  });
+  await render(pane("Aya"));
+  await click('[data-tab="bside"]');
+  await click('[data-action="bside-connect"]');
+  assert.match($("[data-bside-browser-disabled]").textContent!, /다음 대화부터/);
+});
+
+test("an installed skill that could not be refreshed gets a neutral line, not an install hint", async () => {
+  mockFetch({
+    [CATALOG]: catalog,
+    [PROFILES]: { baseUrl: BSIDE_URL, profiles: [{ id: "aya", name: "Aya" }] },
+    [CONNECT]: connected(
+      { id: "aya", name: "Aya" },
+      {
+        ok: false,
+        code: "skill_changed",
+        alreadyInstalled: true,
+      },
+    ),
+  });
+  await render(pane("Aya"));
+  await click('[data-tab="bside"]');
+  await click('[data-action="bside-connect"]');
+  const text = $("[data-bside-skill-warning]").textContent!;
+  assert.match(text, /skill_changed/);
+  assert.match(text, /갱신하지 못했습니다/);
+  assert.ok(!text.includes("직접 설치하세요"));
+});
+
+test("a built-in browser that could not be turned off is flagged with its code", async () => {
+  mockFetch({
+    [CATALOG]: catalog,
+    [PROFILES]: { baseUrl: BSIDE_URL, profiles: [{ id: "aya", name: "Aya" }] },
+    [CONNECT]: connected(
+      { id: "aya", name: "Aya" },
+      { ok: true },
+      { disabled: false, code: "config_unreadable" },
+    ),
+  });
+  await render(pane("Aya"));
+  await click('[data-tab="bside"]');
+  await click('[data-action="bside-connect"]');
+  assert.deepEqual(added, []);
+  assert.match($("[data-bside-browser-warning]").textContent!, /config_unreadable/);
+  assert.ok(!container.querySelector("[data-bside-browser-disabled]"));
   await click('[data-action="bside-continue"]');
   assert.deepEqual(added, ["bside"]);
 });

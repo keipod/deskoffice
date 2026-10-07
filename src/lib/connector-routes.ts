@@ -8,9 +8,11 @@
  */
 import { NextResponse, type NextRequest } from "next/server";
 
-import type { CopyResult } from "@/components/connectors/connector-types";
+import type { BsideConnectResult, CopyResult } from "@/components/connectors/connector-types";
 import {
+  BSIDE_BROWSER_SKILL_AUTHOR,
   BSIDE_BROWSER_SKILL_NAME,
+  BSIDE_BROWSER_SKILL_VERSION,
   bsideBrowserSkillTemplate,
 } from "@/components/skills/bside-browser-skill";
 import {
@@ -151,9 +153,11 @@ async function bsideProfiles(_c: ConnectorContext, a: HandlerArgs): Promise<Resp
 
 /**
  * One click: resolve (or create) the Bside profile, point this NPC's `bside` connector at that
- * profile's agent MCP endpoint, then install the browser skill. Safe to repeat: an existing profile
+ * profile's agent MCP endpoint, install the browser skill, and turn off the NPC's built-in headless
+ * browser toolset so browser work goes through Bside. Safe to repeat: an existing profile
  * with the requested name is reused, an existing Bside connector is updated in place, and an
- * installed skill is left alone.
+ * installed skill is rewritten only when DeskOffice authored it at a lower version than the
+ * current template (a user's own edits are left alone).
  */
 async function bsideConnect(c: ConnectorContext, a: HandlerArgs): Promise<Response> {
   const baseUrl = resolveBsideBaseUrl(str(a.body.baseUrl));
@@ -205,13 +209,41 @@ async function bsideConnect(c: ConnectorContext, a: HandlerArgs): Promise<Respon
     mcpUrl: input.url,
     alreadyConnected,
     skill: await installBsideSkill(c),
+    builtinBrowser: await disableBuiltinBrowser(c),
   });
 }
 
-/** The skill is a convenience on top of the connector — a failure here is reported, not fatal. */
-async function installBsideSkill(
+const BUILTIN_BROWSER_TOOLSET = "browser";
+
+/**
+ * An NPC with a Bside browser must do its browser work in its own logged-in Bside profile, which
+ * Hermes' headless `browser` toolset would bypass. Turns that toolset off and keeps every other
+ * toolset that is on right now. The list is built from the plugin's toolset rows (their effective
+ * `enabled` flags, as the settings picker does), never from the stored list: Hermes switches on
+ * plugin toolsets such as `deskrpg` that are absent from it, and saving the stored list would
+ * turn them off. It goes in as `enabledToolsets` — the key the plugin applies to
+ * `platform_toolsets` (`toolsets` only sets a legacy key nothing reads). A failure is reported,
+ * not fatal.
+ */
+async function disableBuiltinBrowser(
   c: ConnectorContext,
-): Promise<{ ok: boolean; code?: string; alreadyInstalled?: boolean }> {
+): Promise<BsideConnectResult["builtinBrowser"]> {
+  const rows = await c.client.config.toolsets();
+  if (!rows.ok) return { disabled: false, code: rows.failure.code };
+  if (!Array.isArray(rows.data.toolsets)) return { disabled: false, code: "malformed_response" };
+  const enabled = rows.data.toolsets.filter((t) => t.enabled).map((t) => t.name);
+  if (!enabled.includes(BUILTIN_BROWSER_TOOLSET)) return { disabled: true, alreadyDisabled: true };
+  const put = await c.client.config.put({
+    enabledToolsets: enabled.filter((n) => n !== BUILTIN_BROWSER_TOOLSET),
+  });
+  if (!put.ok) return { disabled: false, code: put.failure.code };
+  return put.data.restartMayBeRequired === true
+    ? { disabled: true, restartMayBeRequired: true }
+    : { disabled: true };
+}
+
+/** The skill is a convenience on top of the connector — a failure here is reported, not fatal. */
+async function installBsideSkill(c: ConnectorContext): Promise<BsideConnectResult["skill"]> {
   const features = skillFeaturesOf(c.channel.info.capabilities);
   if (!features.edit)
     return {
@@ -220,12 +252,56 @@ async function installBsideSkill(
     };
   const list = await c.client.skills.list();
   if (list.ok && list.data.skills.some((s) => s.name === BSIDE_BROWSER_SKILL_NAME))
-    return { ok: true, alreadyInstalled: true };
+    return refreshBsideSkill(c);
   const created = await c.client.skills.create(
     { name: BSIDE_BROWSER_SKILL_NAME, category: "browser", content: bsideBrowserSkillTemplate() },
     c.userId,
   );
   return created.ok ? { ok: true } : { ok: false, code: created.failure.code };
+}
+
+/** `author` and `version` from a SKILL.md's frontmatter, if it has any. */
+function skillFrontmatter(content: string): { author?: string; version?: string } {
+  const block = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content)?.[1] ?? "";
+  const field = (key: string) => new RegExp(`^${key}:[ \\t]*(.+?)[ \\t]*$`, "m").exec(block)?.[1];
+  return { author: field("author"), version: field("version") };
+}
+
+/** True only when both are plain `x.y.z` versions and `a` is lower than `b`. */
+function semverLower(a: string | undefined, b: string): boolean {
+  const parse = (v: string | undefined) =>
+    v && /^\d+\.\d+\.\d+$/.test(v) ? v.split(".").map(Number) : null;
+  const pa = parse(a);
+  const pb = parse(b);
+  if (!pa || !pb) return false;
+  for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return pa[i] < pb[i];
+  return false;
+}
+
+/**
+ * Reconnecting brings an installed DeskOffice playbook up to the current tool set, so template fixes
+ * reach every NPC. Only a copy authored by DeskOffice with a lower version is rewritten; a user's
+ * own edits (same or newer version, another author) are left alone.
+ */
+async function refreshBsideSkill(
+  c: ConnectorContext,
+): Promise<{ ok: boolean; code?: string; alreadyInstalled: true; updated?: true }> {
+  const file = await c.client.skills.readFile(BSIDE_BROWSER_SKILL_NAME, "SKILL.md");
+  if (!file.ok) return { ok: false, code: file.failure.code, alreadyInstalled: true };
+  const installed = skillFrontmatter(file.data.content);
+  if (
+    installed.author !== BSIDE_BROWSER_SKILL_AUTHOR ||
+    !semverLower(installed.version, BSIDE_BROWSER_SKILL_VERSION)
+  )
+    return { ok: true, alreadyInstalled: true };
+  const written = await c.client.skills.writeFile(
+    BSIDE_BROWSER_SKILL_NAME,
+    { path: "SKILL.md", content: bsideBrowserSkillTemplate(), baseHash: file.data.hash },
+    c.userId,
+  );
+  return written.ok
+    ? { ok: true, alreadyInstalled: true, updated: true }
+    : { ok: false, code: written.failure.code, alreadyInstalled: true };
 }
 
 /** Creates one server on the target, then its tool filter and disabled state. Returns the failure code, if any. */

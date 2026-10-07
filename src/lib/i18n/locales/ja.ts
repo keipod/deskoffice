@@ -3976,6 +3976,14 @@ const ja: Record<string, string> = {
   "connectors.add.bside.connected": "Bside プロファイル {profile} に接続しました。",
   "connectors.add.bside.skillFailed":
     "ブラウザースキルをインストールできませんでした ({code})。スキル → 追加 → Bside ブラウザーからインストールしてください。",
+  "connectors.add.bside.builtinBrowserOff":
+    "この社員の内蔵ブラウザーツールをオフにしました。ブラウザー作業は Bside で行います。",
+  "connectors.add.bside.builtinBrowserFailed":
+    "内蔵ブラウザーツールをオフにできませんでした ({code})。社員のツール設定でブラウザーツールセットをオフにすると、Bside で作業します。",
+  "connectors.add.bside.builtinBrowserRestart": "次の会話から反映されます。",
+  "connectors.add.bside.skillUpdated": "ブラウザースキルを最新バージョンに更新しました。",
+  "connectors.add.bside.skillRefreshFailed":
+    "ブラウザースキルを更新できませんでした ({code})。インストール済みのスキルはそのままです。",
   "connectors.add.bside.continue": "続ける",
   "connectors.add.search": "カタログを検索",
   "connectors.add.loading": "カタログを読み込み中…",

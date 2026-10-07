@@ -36,6 +36,7 @@ import type {
   AskUserApi,
   KanbanApi,
   McpAdminApi,
+  ProfileConfigApi,
   OwnerPluginClient,
   PluginClient,
   PluginResponse,
@@ -557,6 +558,11 @@ export function createProfilePluginClient(
   };
 
   const prof = `/p/${seg(input.profileName)}/deskrpg`;
+  const config: ProfileConfigApi = {
+    get: () => call(`${prof}/config`, token),
+    put: (patch) => call(`${prof}/config`, token, { method: "PUT", body: patch }),
+    toolsets: () => call(`${prof}/toolsets`, token),
+  };
   const skill = (name: string, suffix = "") => `${prof}/skills/${seg(name)}${suffix}`;
   // Only mutating requests carry the user id — the plugin records it as the changer in the ledger.
   const as = (actor: string) => ({ headers: { "x-deskrpg-actor": actor } });
@@ -705,5 +711,14 @@ export function createProfilePluginClient(
       }),
   };
 
-  return { profileName: input.profileName, cron, skills, mcp, approvals, sessions, askUser };
+  return {
+    profileName: input.profileName,
+    config,
+    cron,
+    skills,
+    mcp,
+    approvals,
+    sessions,
+    askUser,
+  };
 }
