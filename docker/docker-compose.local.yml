@@ -20,6 +20,7 @@ services:
       INTERNAL_HOSTNAME: 0.0.0.0
       HOSTNAME: 0.0.0.0
       PORT: "17770"
+      BSIDE_URL: ${BSIDE_URL:-http://host.docker.internal:27433}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 

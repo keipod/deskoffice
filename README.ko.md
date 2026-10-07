@@ -259,29 +259,31 @@ hermes gateway restart
 
 ### Bside 브라우저 커넥터
 
-NPC에게 전용 Bside 개인 PC·브라우저를 주려면 해당 NPC의 **커넥터** 탭에서 **관리**를 누르고
-**추가 → Bside 브라우저**를 고릅니다. Bside 프로필 ID를 입력하세요. 선택 항목인 엔드포인트
-`BSIDE_API_URL`과 토큰 `BSIDE_API_TOKEN`은 커넥터 생성 요청이 아니라 MCP 비밀값으로 저장됩니다.
-프리셋은 다음을 만듭니다.
+Bside는 NPC마다 전용 브라우저 프로필(로그인, 쿠키, 방문 기록)을 주고, NPC는 MCP로 그 브라우저를
+사람처럼 다룹니다. 피드·댓글·분석 화면을 읽고, 스크롤하고, 입력하고, 미디어를 올립니다. Bside는
+프로필에 고정된 MCP 엔드포인트를 `<Bside 주소>/mcp/agent/<프로필 ID>` 로 제공하며, DeskRPG는
+Bside를 번들하거나 import하지 않습니다.
 
-```text
-command: deskoffice-bside-mcp
-args:    --profile <Bside 프로필 ID>
-trust:   untrusted
-```
+1. 호스트에서 Bside를 실행합니다(API 포트 `27433`).
+2. NPC의 **커넥터** 탭에서 **관리 → 추가 → Bside 브라우저**를 엽니다.
+3. DeskRPG가 Bside 프로필 목록을 불러옵니다. 프로필을 고르거나 **새 프로필 만들기**(기본 이름은
+   NPC 이름)를 그대로 두고 **Bside 브라우저 연결**을 누릅니다.
 
-별도로 배포한 `deskoffice-bside-mcp` 브리지를 **Hermes 게이트웨이 호스트**에 설치하고, 그
-호스트에서 Bside에 닿을 수 있게 하세요. `127.0.0.1` 같은 루프백 주소는 Bside와 Hermes가 같은
-호스트에서 실행될 때만 쓸 수 있습니다. DeskRPG는 Bside를 번들하거나 import하지 않으며 MCP로만
-연결합니다. 프리셋은 신뢰하지 않음으로 시작하므로 쓰기 가능한 브라우저 도구마다 확인이 필요합니다.
-Bside 프로필은 해당 NPC의 개인 브라우저 작업 공간이므로 이 커넥터는 다른 NPC에게 복사할 수 없습니다.
-다른 Bside 프로필을 만든 뒤 그 NPC에서 프리셋을 따로 추가하세요.
+이 한 번의 클릭으로 Bside 프로필을 만들거나 재사용하고, `<Bside 주소>/mcp/agent/<프로필 ID>` 를
+가리키는 `bside` HTTP 커넥터(토큰 없음, 전체 신뢰)를 추가하고, `deskoffice-bside-browser` 스킬까지
+설치합니다. 다시 눌러도 안전합니다. 기존 Bside 커넥터는 새 주소로 바뀌고 이미 설치된 스킬은 그대로
+둡니다. 이 게이트웨이에서 스킬을 설치할 수 없으면 커넥터만 추가되고 화면에 그 사실이 표시되니,
+나중에 **스킬 → 관리 → 추가 → Bside 브라우저**에서 설치하세요.
 
-이어서 같은 NPC의 **스킬** 탭에서 **관리 → 추가 → Bside 브라우저**를 열고
-`deskoffice-bside-browser`를 설치하세요. 이 스킬은 범위가 고정된 `deskoffice_bside_*` MCP 도구로
-상태·탭 확인, snapshot/wait/작업 흐름, 민감한 동작의 사람 승인 경계를 안내하는 프로필 로컬 작업
-지침입니다. 설치하면 NPC의 스킬 메뉴에 활성화된 일반 스킬로 나타나며, 브라우저 작업을 맡길 때
-**사용** 버튼(또는 스킬 칩)을 쓰면 됩니다.
+**Bside 접속 주소.** DeskRPG 서버(프로필 조회)와 Hermes(MCP 호출) 모두 Bside 주소에 닿아야 합니다.
+기본값 `http://host.docker.internal:27433` 은 Docker Desktop 컨테이너에서 호스트를 가리킵니다.
+Linux Docker에서는 compose 파일이 `host.docker.internal` 을 호스트 게이트웨이로 연결하지만, Bside가
+루프백 밖에서도 받도록 API 호스트를 `0.0.0.0` 으로 설정해야 합니다. 다른 주소를 쓰려면 `.env` 에
+`BSIDE_URL` 을 넣거나(`docker-compose.local.yml` 이 앱에 전달합니다) 연결 전에 화면의 **Bside
+주소** 칸을 고치세요.
+
+Bside 프로필은 해당 NPC의 개인 브라우저이므로 이 커넥터는 다른 NPC에게 복사할 수 없습니다. NPC마다
+따로 연결하면 각자 자기 프로필에서 동시에 일합니다.
 
 이제 NPC를 고용할 수 있습니다. NPC는 고용 시점에 Hermes 프로필 하나에 바인딩되며,
 해고하지 않고 나중에 다른 프로필로 다시 연결할 수 있습니다.

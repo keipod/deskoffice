@@ -7,27 +7,60 @@ import {
   bsideBrowserSkillTemplate,
 } from "./bside-browser-skill";
 
-test("Bside browser skill is a scoped MCP work playbook", () => {
+const TOOLS = [
+  "health",
+  "tabs",
+  "open",
+  "activate_tab",
+  "back",
+  "forward",
+  "reload",
+  "navigate",
+  "snapshot",
+  "text",
+  "wait",
+  "click",
+  "type",
+  "hover",
+  "select",
+  "scroll",
+  "key",
+  "upload",
+  "evaluate",
+  "screenshot",
+  "history",
+  "workflows",
+  "workflow_probe",
+  "workflow_run",
+  "workflow_runs",
+  "agent_task",
+  "memory_search",
+  "memory_remember",
+  "vault_fill",
+  "approvals",
+];
+
+test("Bside browser skill is a profile-pinned SNS browsing playbook", () => {
   const skill = bsideBrowserSkillTemplate();
 
+  assert.equal(BSIDE_BROWSER_SKILL_NAME, "deskoffice-bside-browser");
   assert.ok(
     skill.startsWith(
       `---\nname: ${BSIDE_BROWSER_SKILL_NAME}\ndescription: ${BSIDE_BROWSER_SKILL_DESCRIPTION}\n---`,
     ),
   );
-  for (const tool of [
-    "deskoffice_bside_health",
-    "deskoffice_bside_tabs",
-    "deskoffice_bside_open",
-    "deskoffice_bside_snapshot",
-    "deskoffice_bside_wait",
-    "deskoffice_bside_click",
-    "deskoffice_bside_type",
-    "deskoffice_bside_history",
+  for (const tool of TOOLS) {
+    assert.match(skill, new RegExp(`\`deskoffice_bside_${tool}\``), tool);
+  }
+  for (const workflow of [
+    "youtube.publish",
+    "youtube.analytics.inspect",
+    "youtube.comments.inspect",
+    "instagram.publish",
+    "threads.publish",
   ]) {
-    assert.match(skill, new RegExp(`\\\`${tool}\\\``));
+    assert.ok(skill.includes(`\`${workflow}\``), workflow);
   }
   assert.match(skill, /sensitive: true/);
   assert.match(skill, /human approval/);
-  assert.match(skill, /Do not request another Bside profile/);
 });

@@ -1,12 +1,12 @@
 /**
- * The local, profile-scoped playbook installed from DeskOffice's Skills menu.
- * It deliberately names only the capability-limited MCP tools published by
- * `deskoffice-bside-mcp`; this is not a dependency on Bside source code.
+ * The local, profile-scoped playbook installed by the one-click Bside connect (or from the Skills
+ * menu). It names the profile-pinned `deskoffice_bside_*` MCP tools Bside serves at
+ * `/mcp/agent/<profile>`; this is not a dependency on Bside source code.
  */
 export const BSIDE_BROWSER_SKILL_NAME = "deskoffice-bside-browser";
 
 export const BSIDE_BROWSER_SKILL_DESCRIPTION =
-  "Use this agent's assigned Bside personal browser through its scoped DeskOffice MCP tools.";
+  "Use this agent's own Bside browser to read, browse and manage SNS accounts (YouTube, Instagram, Threads) like a person.";
 
 export function bsideBrowserSkillTemplate(): string {
   return `---
@@ -16,25 +16,48 @@ description: ${BSIDE_BROWSER_SKILL_DESCRIPTION}
 
 # DeskOffice Bside Personal Browser
 
-Use this skill for browser work assigned to this employee. The Bside MCP server is this employee's personal PC/browser capability and is pinned to one Bside profile.
+The \`bside\` MCP server is this employee's own PC/browser. It is pinned to one Bside profile: the logged-in accounts, cookies and history belong to this employee only. Other employees use other profiles, so several of you can work at the same time.
 
-## Start safely
+## Start
 
-1. Call \`deskoffice_bside_health\`, then \`deskoffice_bside_tabs\`.
-2. Work only with the listed tab IDs. If there is no suitable tab, call \`deskoffice_bside_open\` to create one in this profile.
-3. Before changing a page, call \`deskoffice_bside_snapshot\`; use the returned accessibility reference or an explicit scoped tab ID.
+1. \`deskoffice_bside_health\` — confirm Bside is up.
+2. \`deskoffice_bside_tabs\` — list this profile's tabs. Reuse a suitable tab; otherwise \`deskoffice_bside_open\` (opens in the background, so you never steal another employee's screen).
+3. Keep the tab ID explicit in every call once more than one tab is open. Use \`deskoffice_bside_activate_tab\` only when something truly needs the foreground.
+4. \`deskoffice_bside_memory_search\` for account context you saved earlier (handles, posting style, schedules, what was last checked).
 
-## Work loop
+## Reading pages
 
-1. Navigate with \`deskoffice_bside_navigate\` or inspect with \`deskoffice_bside_snapshot\`.
-2. Use \`deskoffice_bside_wait\` after navigation or an SPA action instead of repeatedly guessing page state.
-3. Use \`deskoffice_bside_click\` and \`deskoffice_bside_type\` for normal page interaction. Keep the tab ID explicit when more than one tab is open.
-4. Use \`deskoffice_bside_history\` only for the assigned profile's redacted visit history.
+- \`deskoffice_bside_text\` — the readable text of the page. Use it to read posts, comments, captions, analytics numbers and studio tables. Cheapest way to understand content; pass \`maxChars\` for long pages.
+- \`deskoffice_bside_snapshot\` — the accessibility tree with element refs. Use it before clicking or typing so you target a real ref, not a guess.
+- \`deskoffice_bside_screenshot\` — a visual check (thumbnails, layout, whether a dialog is open, media previews). Use when text is not enough.
+- \`deskoffice_bside_wait\` after navigation or any SPA action instead of guessing that the page changed.
+
+## Browsing like a person
+
+- \`deskoffice_bside_navigate\`, \`deskoffice_bside_back\`, \`deskoffice_bside_forward\`, \`deskoffice_bside_reload\` to move around.
+- \`deskoffice_bside_scroll\` to move through feeds, comment threads and long analytics pages. Scroll in steps, read with \`text\` between steps, and stop when you have what you need; infinite feeds never end.
+- \`deskoffice_bside_click\`, \`deskoffice_bside_type\` (human-like typing by default), \`deskoffice_bside_hover\` (reveal menus/tooltips), \`deskoffice_bside_select\` (dropdowns), \`deskoffice_bside_key\` (Enter, Escape, Tab, PageDown, ArrowDown…).
+- \`deskoffice_bside_upload\` attaches media files (video, image) to the page's file input when posting.
+- \`deskoffice_bside_evaluate\` runs a small read-only JavaScript expression when the page hides data the other tools cannot reach. Do not use it to bypass approvals.
+- \`deskoffice_bside_history\` shows this profile's recent visits.
+
+## SNS workflows
+
+Bside has tested workflows for common SNS jobs. Prefer them over hand-driving the UI:
+
+1. \`deskoffice_bside_workflows\` — list what is available.
+2. \`deskoffice_bside_workflow_probe\` — check a workflow can run now (logged in, page reachable) before running it.
+3. \`deskoffice_bside_workflow_run\`, then follow it with \`deskoffice_bside_workflow_runs\`.
+
+Typical workflows: \`youtube.publish\`, \`youtube.analytics.inspect\`, \`youtube.comments.inspect\`, \`instagram.publish\`, \`threads.publish\`.
+
+For a goal that needs many steps on its own, \`deskoffice_bside_agent_task\` hands it to Bside's built-in browser agent on this profile; check the result afterwards.
 
 ## Approval and boundaries
 
-- Set \`sensitive: true\` for publish, send, delete, purchase, account, or other irreversible actions. Bside will stop for a human approval; report that state and do not try to bypass or repeat it through another tool.
-- Do not request another Bside profile, generic \`bside_*\` administration tools, raw CDP, credentials, files, or system settings. This skill is browser work only.
-- Do not infer that a page action succeeded. Snapshot or wait for the resulting state and report the concrete outcome, tab, and any approval still needed.
+- Set \`sensitive: true\` on anything that publishes, posts, replies, sends, deletes, buys or changes account settings. Bside stops for a human approval; report that and check \`deskoffice_bside_approvals\` instead of retrying through another tool.
+- Logins: use \`deskoffice_bside_vault_fill\` for saved credentials. Never type passwords from chat or write them to memory.
+- Save durable account facts with \`deskoffice_bside_memory_remember\` (not secrets).
+- Never assume an action worked. Confirm with \`text\`, \`snapshot\` or \`screenshot\`, then report the concrete result, the tab, and any approval still pending.
 `;
 }

@@ -3602,7 +3602,7 @@ const ja: Record<string, string> = {
   "skills.create.submit": "作成",
   "skills.bside.title": "Bside 個人ブラウザースキル",
   "skills.bside.intro":
-    "この NPC がプロファイルに固定された Bside MCP ブラウザーを使うための DeskOffice 手順をインストールします。",
+    "この NPC の Bside ブラウザー用 DeskOffice 手順をインストールします。コネクター → 追加 → Bside ブラウザー → 接続 のワンクリックで自動インストールされます。再インストール時に使ってください。",
   "skills.bside.boundary":
     "NPC の Bside ブラウザー接続後に使います。スコープされたブラウザーツールだけを使い、Bside の人による承認境界を守ります。",
   "skills.bside.install": "Bside ブラウザースキルをインストール",
@@ -3884,6 +3884,14 @@ const ja: Record<string, string> = {
   "connectors.error.secret_key_not_referenced": "設定で使われていない秘密値の名前です",
   "connectors.error.bside_profile_not_copyable":
     "Bside 個人ブラウザーは一つの NPC に紐付くためコピーできません。別の Bside プロファイルで個別に追加してください。",
+  "connectors.error.bside_unreachable":
+    "Bside に接続できません。Bside を起動して URL を確認してください。",
+  "connectors.error.bside_error": "Bside がエラーを返しました: {detail}",
+  "connectors.error.bside_url_invalid": "Bside URL は http:// または https:// で始めてください",
+  "connectors.error.bside_profile_required":
+    "Bside プロファイルを選ぶか、新しいプロファイル名を入力してください",
+  "connectors.error.bside_profile_not_found":
+    "その Bside プロファイルはもうありません。一覧を更新してください。",
   "connectors.error.invalid_name": "その名前は使えません",
   "connectors.error.timeout": "応答がないため中断しました",
   "connectors.error.unreachable": "サーバーに接続できませんでした",
@@ -3946,17 +3954,29 @@ const ja: Record<string, string> = {
   "connectors.add.tab.custom": "手動で追加",
   "connectors.add.bside.title": "この NPC の Bside ブラウザー",
   "connectors.add.bside.intro":
-    "この NPC 専用の PC・ブラウザーとなる Bside プロファイルを接続します。",
+    "ワンクリックでこの NPC 専用の Bside ブラウザープロファイルを用意します。プロファイルを選ぶか作成し、bside コネクターを追加して、ブラウザースキルもインストールします。",
+  "connectors.add.bside.url": "Bside URL",
+  "connectors.add.bside.urlHint":
+    "DeskRPG と Hermes が Bside に接続するアドレスです。Docker Desktop では http://host.docker.internal:27433 です。",
+  "connectors.add.bside.retry": "再試行",
+  "connectors.add.bside.loadingProfiles": "Bside を探しています…",
+  "connectors.add.bside.unreachable":
+    "{url} の Bside に接続できません。Bside を起動して URL を確認し、再試行してください。",
+  "connectors.add.bside.bsideError": "{url} の Bside がエラーを返しました: {detail}",
+  "connectors.add.bside.profile": "Bside プロファイル",
+  "connectors.add.bside.profileNew": "新しいプロファイルを作成",
+  "connectors.add.bside.profileHint":
+    "このプロファイルが NPC 専用のブラウザーになります。ログイン、Cookie、履歴はここに残ります。",
+  "connectors.add.bside.newProfileName": "新しいプロファイル名",
+  "connectors.add.bside.mcpUrl": "MCP エンドポイント",
   "connectors.add.bside.gatewayGuidance":
-    "deskoffice-bside-mcp は Hermes ゲートウェイホストで実行されます。Bside はそのホストから到達可能である必要があり、ループバックアドレスは Bside が同じホストで動く場合だけ使ってください。",
-  "connectors.add.bside.profileId": "Bside プロファイル ID",
-  "connectors.add.bside.profileHint": "このプロファイルが NPC 専用のブラウザー作業領域になります。",
-  "connectors.add.bside.apiUrl": "Bside API URL（任意）",
-  "connectors.add.bside.apiToken": "Bside API トークン（任意）",
-  "connectors.add.bside.untrusted":
-    "このコネクターは未信頼で開始するため、書き込み可能なブラウザーツールは確認を求めます。",
-  "connectors.add.bside.add": "Bside ブラウザーを追加",
-  "connectors.add.bside.adding": "Bside ブラウザーを追加中…",
+    "Hermes もこの URL で Bside に MCP 接続するため、Hermes ホストからも到達できる必要があります。Linux の Docker では Bside の API ホストを 0.0.0.0 にしてください。",
+  "connectors.add.bside.connect": "Bside ブラウザーを接続",
+  "connectors.add.bside.connecting": "Bside ブラウザーを接続中…",
+  "connectors.add.bside.connected": "Bside プロファイル {profile} に接続しました。",
+  "connectors.add.bside.skillFailed":
+    "ブラウザースキルをインストールできませんでした ({code})。スキル → 追加 → Bside ブラウザーからインストールしてください。",
+  "connectors.add.bside.continue": "続ける",
   "connectors.add.search": "カタログを検索",
   "connectors.add.loading": "カタログを読み込み中…",
   "connectors.add.catalogEmpty": "該当する項目がありません",

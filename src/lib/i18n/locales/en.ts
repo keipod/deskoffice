@@ -3570,7 +3570,7 @@ const en: Record<string, string> = {
   "skills.create.submit": "Create",
   "skills.bside.title": "Bside personal browser skill",
   "skills.bside.intro":
-    "Install the DeskOffice playbook that teaches this NPC to use its profile-pinned Bside MCP browser.",
+    "Install the DeskOffice playbook for this NPC's Bside browser. Connectors → Add → Bside browser → Connect already installs it in one click; use this to reinstall.",
   "skills.bside.boundary":
     "Use this after connecting the NPC's Bside browser. It uses only scoped browser tools and preserves Bside's human approval boundary.",
   "skills.bside.install": "Install Bside browser skill",
@@ -3852,6 +3852,12 @@ const en: Record<string, string> = {
   "connectors.error.secret_key_not_referenced": "The settings don't use that secret name",
   "connectors.error.bside_profile_not_copyable":
     "A Bside personal browser is bound to one NPC and cannot be copied. Add it separately with another Bside profile.",
+  "connectors.error.bside_unreachable": "Can't reach Bside. Start Bside and check its URL.",
+  "connectors.error.bside_error": "Bside returned an error: {detail}",
+  "connectors.error.bside_url_invalid": "The Bside URL must start with http:// or https://",
+  "connectors.error.bside_profile_required": "Pick a Bside profile or enter a name for a new one",
+  "connectors.error.bside_profile_not_found":
+    "That Bside profile no longer exists. Refresh the list.",
   "connectors.error.invalid_name": "That name can't be used",
   "connectors.error.timeout": "No response, so it was stopped",
   "connectors.error.unreachable": "Couldn't reach the server",
@@ -3915,17 +3921,29 @@ const en: Record<string, string> = {
   "connectors.add.tab.custom": "Add manually",
   "connectors.add.bside.title": "Bside browser for this NPC",
   "connectors.add.bside.intro":
-    "Connect the Bside profile that acts as this NPC's personal PC and browser.",
+    "Gives this NPC its own Bside browser profile in one click: DeskRPG picks or creates the profile, adds the bside connector, and installs the browser skill.",
+  "connectors.add.bside.url": "Bside URL",
+  "connectors.add.bside.urlHint":
+    "Where DeskRPG and Hermes reach Bside. Docker Desktop: http://host.docker.internal:27433.",
+  "connectors.add.bside.retry": "Try again",
+  "connectors.add.bside.loadingProfiles": "Looking for Bside…",
+  "connectors.add.bside.unreachable":
+    "Can't reach Bside at {url}. Start Bside and check the URL, then try again.",
+  "connectors.add.bside.bsideError": "Bside at {url} answered with an error: {detail}",
+  "connectors.add.bside.profile": "Bside profile",
+  "connectors.add.bside.profileNew": "Create a new profile",
+  "connectors.add.bside.profileHint":
+    "This profile becomes the NPC's own browser: its logins, cookies and history.",
+  "connectors.add.bside.newProfileName": "New profile name",
+  "connectors.add.bside.mcpUrl": "MCP endpoint",
   "connectors.add.bside.gatewayGuidance":
-    "deskoffice-bside-mcp runs on the Hermes gateway host. Bside must be reachable from that host; use a loopback address only when Bside runs on the same host.",
-  "connectors.add.bside.profileId": "Bside profile ID",
-  "connectors.add.bside.profileHint": "This profile becomes the NPC's dedicated browser workspace.",
-  "connectors.add.bside.apiUrl": "Bside API URL (optional)",
-  "connectors.add.bside.apiToken": "Bside API token (optional)",
-  "connectors.add.bside.untrusted":
-    "This connector starts untrusted, so write-capable browser tools require confirmation.",
-  "connectors.add.bside.add": "Add Bside browser",
-  "connectors.add.bside.adding": "Adding Bside browser…",
+    "Hermes connects to Bside at this URL over MCP, so it must be reachable from the Hermes host too. On Linux Docker, set Bside's API host to 0.0.0.0.",
+  "connectors.add.bside.connect": "Connect Bside browser",
+  "connectors.add.bside.connecting": "Connecting Bside browser…",
+  "connectors.add.bside.connected": "Connected to Bside profile {profile}.",
+  "connectors.add.bside.skillFailed":
+    "The browser skill could not be installed ({code}). Install it from Skills → Add → Bside browser.",
+  "connectors.add.bside.continue": "Continue",
   "connectors.add.search": "Search the catalog",
   "connectors.add.loading": "Loading the catalog…",
   "connectors.add.catalogEmpty": "No matching entries",

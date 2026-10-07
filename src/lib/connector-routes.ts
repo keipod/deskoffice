@@ -2,13 +2,29 @@
  * NPC MCP connector REST (`/api/channels/:id/npcs/:npcId/connectors/**`). One catch-all
  * route dispatches through this table, in the plugin's `routes.py` order (fixed segments
  * before a server name). Permission is decided here; the plugin only checks the profile key.
- * Two routes are DeskRPG's own: the OAuth callback (the pasted URL is parsed here so only
- * `code`/`state`/`iss` reach the plugin) and copy (export from this NPC, create on targets).
+ * Some routes are DeskRPG's own: the OAuth callback (the pasted URL is parsed here so only
+ * `code`/`state`/`iss` reach the plugin), copy (export from this NPC, create on targets), and the
+ * one-click Bside browser connect (`bside/profiles`, `bside/connect`).
  */
 import { NextResponse, type NextRequest } from "next/server";
 
 import type { CopyResult } from "@/components/connectors/connector-types";
-import { isDeskOfficeBsideBridge } from "@/lib/bside-mcp";
+import {
+  BSIDE_BROWSER_SKILL_NAME,
+  bsideBrowserSkillTemplate,
+} from "@/components/skills/bside-browser-skill";
+import {
+  buildBsideMcpConfig,
+  BSIDE_MCP_SERVER_NAME,
+} from "@/components/connectors/bside-mcp-preset";
+import {
+  BsideError,
+  createBsideProfile,
+  isDeskOfficeBsideBridge,
+  listBsideProfiles,
+  resolveBsideBaseUrl,
+  type BsideProfile,
+} from "@/lib/bside-mcp";
 import {
   resolveConnectorContext,
   requireMcpCapability,
@@ -19,9 +35,10 @@ import type { McpAdminApi, McpServerInput, PluginResponse } from "@/lib/hermes/p
 import { getUserId } from "@/lib/internal-rpc";
 import { parseOAuthPaste } from "@/lib/mcp-oauth-paste";
 import { requireOwner, sharedChannelCount } from "@/lib/skill-access";
+import { noSkillManagement, skillFeaturesOf } from "@/lib/skill-features";
 
 type Access = "member" | "owner";
-type HandlerArgs = { args: string[]; body: Record<string, unknown> };
+type HandlerArgs = { args: string[]; body: Record<string, unknown>; sp: URLSearchParams };
 type Handler = (
   ctx: ConnectorContext,
   a: HandlerArgs,
@@ -37,7 +54,7 @@ type Row = {
 const str = (v: unknown) => (typeof v === "string" ? v : "");
 const strList = (v: unknown) =>
   Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
-const FIXED = new Set(["servers", "jobs", "oauth", "catalog", "reload", "export", "copy"]);
+const FIXED = new Set(["servers", "jobs", "oauth", "catalog", "reload", "export", "copy", "bside"]);
 
 async function oauthCallback(
   c: ConnectorContext,
@@ -83,7 +100,7 @@ async function copy(c: ConnectorContext, a: HandlerArgs): Promise<Response> {
     const entry = res.data.entry;
     exported.set(
       name,
-      isDeskOfficeBsideBridge(entry.command, entry.args)
+      isDeskOfficeBsideBridge(entry.command, entry.args, entry.url)
         ? { code: BSIDE_PROFILE_NOT_COPYABLE }
         : toCopySource(name, entry),
     );
@@ -106,6 +123,109 @@ async function copy(c: ConnectorContext, a: HandlerArgs): Promise<Response> {
     }
   }
   return NextResponse.json({ results });
+}
+
+const bsideFailure = (e: unknown) =>
+  e instanceof BsideError
+    ? cronError(502, e.code, e.message)
+    : cronError(502, "bside_error", e instanceof Error ? e.message : String(e));
+
+const invalidBsideUrl = () =>
+  cronError(400, "bside_url_invalid", "Bside URL must be an http(s) address");
+
+/** Bside's profiles as DeskRPG's server reaches them. Unreachable is a normal answer, not an error. */
+async function bsideProfiles(_c: ConnectorContext, a: HandlerArgs): Promise<Response> {
+  const baseUrl = resolveBsideBaseUrl(a.sp.get("baseUrl"));
+  if (!baseUrl) return invalidBsideUrl();
+  try {
+    return NextResponse.json({ baseUrl, profiles: await listBsideProfiles(baseUrl) });
+  } catch (e) {
+    const code = e instanceof BsideError ? e.code : "bside_error";
+    return NextResponse.json({
+      baseUrl,
+      error: code,
+      message: e instanceof Error ? e.message : "",
+    });
+  }
+}
+
+/**
+ * One click: resolve (or create) the Bside profile, point this NPC's `bside` connector at that
+ * profile's agent MCP endpoint, then install the browser skill. Safe to repeat: an existing profile
+ * with the requested name is reused, an existing Bside connector is updated in place, and an
+ * installed skill is left alone.
+ */
+async function bsideConnect(c: ConnectorContext, a: HandlerArgs): Promise<Response> {
+  const baseUrl = resolveBsideBaseUrl(str(a.body.baseUrl));
+  if (!baseUrl) return invalidBsideUrl();
+  const profileId = str(a.body.profileId).trim();
+  const createName = str(a.body.createProfileName).trim();
+  if (!profileId && !createName)
+    return cronError(400, "bside_profile_required", "Pick a Bside profile or name a new one");
+
+  let profile: BsideProfile;
+  try {
+    const profiles = await listBsideProfiles(baseUrl);
+    const found = profileId
+      ? profiles.find((p) => p.id === profileId)
+      : profiles.find((p) => p.name.trim().toLowerCase() === createName.toLowerCase());
+    if (found) profile = found;
+    else if (profileId)
+      return cronError(404, "bside_profile_not_found", `No Bside profile ${profileId}`);
+    else profile = await createBsideProfile(baseUrl, createName);
+  } catch (e) {
+    return bsideFailure(e);
+  }
+
+  const input = buildBsideMcpConfig({ profileId: profile.id, baseUrl });
+  let connector = await c.client.mcp.create(input, c.userId);
+  let alreadyConnected = false;
+  if (!connector.ok && connector.failure.code === "name_taken") {
+    const existing = await c.client.mcp.detail(BSIDE_MCP_SERVER_NAME);
+    if (!existing.ok) return pluginFailureResponse(existing);
+    const d = existing.data;
+    // Never overwrite an unrelated server someone happened to name `bside`.
+    if (!isDeskOfficeBsideBridge(d.command, d.args, d.url)) return pluginFailureResponse(connector);
+    if (d.url === input.url) {
+      connector = { ok: true, data: d };
+      alreadyConnected = true;
+    } else {
+      connector = await c.client.mcp.update(
+        BSIDE_MCP_SERVER_NAME,
+        { ...input, baseRevision: d.revision },
+        c.userId,
+      );
+    }
+  }
+  if (!connector.ok) return pluginFailureResponse(connector);
+
+  return NextResponse.json({
+    profile,
+    connector: connector.data,
+    mcpUrl: input.url,
+    alreadyConnected,
+    skill: await installBsideSkill(c),
+  });
+}
+
+/** The skill is a convenience on top of the connector — a failure here is reported, not fatal. */
+async function installBsideSkill(
+  c: ConnectorContext,
+): Promise<{ ok: boolean; code?: string; alreadyInstalled?: boolean }> {
+  const features = skillFeaturesOf(c.channel.info.capabilities);
+  if (!features.edit)
+    return {
+      ok: false,
+      code: noSkillManagement(features) ? "plugin_upgrade_required" : "skill_feature_unavailable",
+    };
+  const list = await c.client.skills.list();
+  if (list.ok && list.data.skills.some((s) => s.name === BSIDE_BROWSER_SKILL_NAME))
+    return { ok: true, alreadyInstalled: true };
+  const created = await c.client.skills.create(
+    { name: BSIDE_BROWSER_SKILL_NAME, category: "browser", content: bsideBrowserSkillTemplate() },
+    c.userId,
+  );
+  return created.ok ? { ok: true } : { ok: false, code: created.failure.code };
 }
 
 /** Creates one server on the target, then its tool filter and disabled state. Returns the failure code, if any. */
@@ -229,6 +349,8 @@ const ROWS: Row[] = [
     handler: (c) => c.client.mcp.reload(c.userId),
   },
   { method: "POST", pattern: ["copy"], access: "owner", handler: copy },
+  { method: "GET", pattern: ["bside", "profiles"], access: "owner", handler: bsideProfiles },
+  { method: "POST", pattern: ["bside", "connect"], access: "owner", handler: bsideConnect },
   {
     method: "GET",
     pattern: ["servers", "*"],
@@ -375,6 +497,10 @@ export async function handleConnectorRoute(
   if (!found) return cronError(404, "not_found", "Unknown connector route");
   const owner = found.row.access === "owner" ? requireOwner(ctx) : null;
   if (owner) return owner;
-  const out = await found.row.handler(ctx, { args: found.args, body: await readBody(req) });
+  const out = await found.row.handler(ctx, {
+    args: found.args,
+    body: await readBody(req),
+    sp: req.nextUrl.searchParams,
+  });
   return relay(out, found.row.okStatus ?? 200);
 }

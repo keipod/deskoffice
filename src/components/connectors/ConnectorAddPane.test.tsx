@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { act } from "react";
 
 import type { McpServerView } from "@/lib/hermes/plugin-client-types";
 
@@ -10,6 +11,7 @@ import {
   cleanup,
   click,
   container,
+  flush,
   mockFetch,
   render,
   text,
@@ -52,9 +54,10 @@ const catalog = {
 
 let added: string[] = [];
 let cancelled = 0;
-const pane = () => (
+const pane = (npcName?: string) => (
   <ConnectorAddPane
     api={createConnectorsApi("ch-1", "n-1")}
+    npcName={npcName}
     onAdded={(name) => {
       added.push(name);
     }}
@@ -103,57 +106,131 @@ test("installing a catalog entry sends the required env, clears it, and reports 
   assert.ok(!container.querySelector('[name="env-LINEAR_API_KEY"]') || input.value === "");
 });
 
-test("the Bside preset adds an untrusted personal-browser bridge and stores optional values as secrets", async () => {
+const BSIDE_URL = "http://host.docker.internal:27433";
+const PROFILES = `GET ${ROOT}/bside/profiles`;
+const CONNECT = `POST ${ROOT}/bside/connect`;
+const connected = (
+  profile: { id: string; name: string },
+  skill: Record<string, unknown> = { ok: true },
+) => ({
+  profile,
+  connector: view("bside", {
+    endpointSummary: `host.docker.internal:27433/mcp/agent/${profile.id}`,
+  }),
+  mcpUrl: `${BSIDE_URL}/mcp/agent/${profile.id}`,
+  alreadyConnected: false,
+  skill,
+});
+
+async function choose(sel: string, value: string) {
+  const el = $(sel) as HTMLSelectElement;
+  // The DOM test window's own HTMLSelectElement is not a global here.
+  const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), "value")!.set!;
+  await act(async () => {
+    setter.call(el, value);
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+  });
+  await flush();
+}
+
+test("the Bside tab finds Bside, preselects the NPC's profile, and connects in one click", async () => {
   const log = mockFetch({
     [CATALOG]: catalog,
-    [`POST ${ROOT}/servers`]: view("bside", {
-      transport: "stdio",
-      auth: "env",
-      trust: "untrusted",
-      secrets: [
-        { key: "BSIDE_API_URL", hasValue: false },
-        { key: "BSIDE_API_TOKEN", hasValue: false },
+    [PROFILES]: {
+      baseUrl: BSIDE_URL,
+      profiles: [
+        { id: "work", name: "Work" },
+        { id: "aya", name: "Aya" },
       ],
-    }),
-    [`PUT ${ROOT}/servers/bside/secrets/BSIDE_API_URL`]: {
-      key: "BSIDE_API_URL",
-      hasValue: true,
     },
-    [`PUT ${ROOT}/servers/bside/secrets/BSIDE_API_TOKEN`]: {
-      key: "BSIDE_API_TOKEN",
-      hasValue: true,
+    [CONNECT]: connected({ id: "aya", name: "Aya" }),
+  });
+  await render(pane("Aya"));
+  await click('[data-tab="bside"]');
+  assert.ok(log.calls.includes(PROFILES));
+  assert.equal(($('[name="bside-url"]') as HTMLInputElement).value, BSIDE_URL);
+  assert.equal(($('[name="bside-profile"]') as HTMLSelectElement).value, "aya");
+  assert.equal($("[data-bside-mcp-url]").textContent, `${BSIDE_URL}/mcp/agent/aya`);
+  assert.ok(!container.querySelector('[name="bside-api-token"]'));
+  await click('[data-action="bside-connect"]');
+  assert.deepEqual(log.bodies[CONNECT], { baseUrl: BSIDE_URL, profileId: "aya" });
+  assert.deepEqual(added, ["bside"]);
+});
+
+test("a new Bside profile defaults to the NPC's name", async () => {
+  const log = mockFetch({
+    [CATALOG]: catalog,
+    [PROFILES]: { baseUrl: BSIDE_URL, profiles: [{ id: "work", name: "Work" }] },
+    [CONNECT]: connected({ id: "maya", name: "Maya" }),
+  });
+  await render(pane("Maya"));
+  await click('[data-tab="bside"]');
+  assert.equal(($('[name="bside-profile"]') as HTMLSelectElement).value, "__new__");
+  assert.equal(($('[name="bside-new-profile-name"]') as HTMLInputElement).value, "Maya");
+  await choose('[name="bside-profile"]', "work");
+  assert.ok(!container.querySelector('[name="bside-new-profile-name"]'));
+  await choose('[name="bside-profile"]', "__new__");
+  await click('[data-action="bside-connect"]');
+  assert.deepEqual(log.bodies[CONNECT], { baseUrl: BSIDE_URL, createProfileName: "Maya" });
+  assert.deepEqual(added, ["bside"]);
+});
+
+test("an unreachable Bside shows the error and retries with the edited URL", async () => {
+  const routes: Record<string, Record<string, unknown>> = {
+    [CATALOG]: catalog,
+    [PROFILES]: { baseUrl: BSIDE_URL, error: "bside_unreachable", message: "ECONNREFUSED" },
+    [`GET ${ROOT}/bside/profiles?baseUrl=${encodeURIComponent("http://192.168.0.5:27433")}`]: {
+      baseUrl: "http://192.168.0.5:27433",
+      profiles: [],
     },
+  };
+  const log = mockFetch(routes);
+  await render(pane());
+  await click('[data-tab="bside"]');
+  assert.match($("[data-bside-unreachable]").textContent!, /host\.docker\.internal:27433/);
+  assert.equal(($('[data-action="bside-connect"]') as HTMLButtonElement).disabled, true);
+  await type('[name="bside-url"]', "http://192.168.0.5:27433");
+  await click('[data-action="bside-retry-probe"]');
+  assert.ok(!container.querySelector("[data-bside-unreachable]"));
+  assert.equal(($('[name="bside-profile"]') as HTMLSelectElement).value, "__new__");
+  // No NPC name and no typed name: nothing to create yet.
+  assert.equal(($('[data-action="bside-connect"]') as HTMLButtonElement).disabled, true);
+  assert.ok(!log.calls.includes(CONNECT));
+});
+
+test("a skill that failed to install is shown before moving on", async () => {
+  mockFetch({
+    [CATALOG]: catalog,
+    [PROFILES]: { baseUrl: BSIDE_URL, profiles: [{ id: "aya", name: "Aya" }] },
+    [CONNECT]: connected(
+      { id: "aya", name: "Aya" },
+      { ok: false, code: "skill_feature_unavailable" },
+    ),
+  });
+  await render(pane("Aya"));
+  await click('[data-tab="bside"]');
+  await click('[data-action="bside-connect"]');
+  assert.deepEqual(added, []);
+  assert.match($("[data-bside-skill-warning]").textContent!, /skill_feature_unavailable/);
+  assert.ok($("[data-bside-result]").textContent!.includes(`${BSIDE_URL}/mcp/agent/aya`));
+  await click('[data-action="bside-continue"]');
+  assert.deepEqual(added, ["bside"]);
+});
+
+test("a late NPC name fills the new profile name until the user edits it", async () => {
+  mockFetch({
+    [CATALOG]: catalog,
+    [PROFILES]: { baseUrl: BSIDE_URL, profiles: [] },
   });
   await render(pane());
   await click('[data-tab="bside"]');
-  assert.match($("[data-bside-command]").textContent!, /deskoffice-bside-mcp --profile/);
-  assert.match($("[data-bside-guidance]").textContent!, /Hermes 게이트웨이 호스트/);
-  await type('[name="bside-profile-id"]', "aya-browser");
-  await type('[name="bside-api-url"]', "https://bside.internal.example");
-  const token = $('[name="bside-api-token"]') as HTMLInputElement;
-  assert.equal(token.type, "password");
-  await type('[name="bside-api-token"]', "bside_token");
-  await click('[data-action="bside-install"]');
-
-  const body = log.bodies[`POST ${ROOT}/servers`] as Record<string, unknown>;
-  assert.deepEqual(body, {
-    name: "bside",
-    transport: "stdio",
-    command: "deskoffice-bside-mcp",
-    args: ["--profile", "aya-browser"],
-    env: { BSIDE_API_URL: "", BSIDE_API_TOKEN: "" },
-    auth: "env",
-    trust: "untrusted",
-    confirmName: "bside",
-  });
-  assert.equal(JSON.stringify(body).includes("bside_token"), false);
-  assert.deepEqual(log.bodies[`PUT ${ROOT}/servers/bside/secrets/BSIDE_API_URL`], {
-    value: "https://bside.internal.example",
-  });
-  assert.deepEqual(log.bodies[`PUT ${ROOT}/servers/bside/secrets/BSIDE_API_TOKEN`], {
-    value: "bside_token",
-  });
-  assert.deepEqual(added, ["bside"]);
+  const nameInput = () => $('[name="bside-new-profile-name"]') as HTMLInputElement;
+  assert.equal(nameInput().value, "");
+  await render(pane("Maya"));
+  assert.equal(nameInput().value, "Maya");
+  await type('[name="bside-new-profile-name"]', "Desk");
+  await render(pane("Mina"));
+  assert.equal(nameInput().value, "Desk");
 });
 
 test("pasting mcpServers JSON on the custom tab fills name, command, and arguments", async () => {

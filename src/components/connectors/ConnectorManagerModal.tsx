@@ -463,6 +463,7 @@ export default function ConnectorManagerModal({
               {pane === "add" && canManage ? (
                 <ConnectorAddPane
                   api={api}
+                  npcName={npcName}
                   onAdded={(name) => void onAdded(name)}
                   onCancel={() => setPane("detail")}
                 />

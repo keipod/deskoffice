@@ -146,6 +146,21 @@ test("a Bside personal browser cannot be copied to another NPC", async () => {
   assert.ok(!log.calls.includes(`POST ${ROOT}/copy`));
 });
 
+test("a Bside agent HTTP connector cannot be copied either", async () => {
+  mockFetch({
+    [`GET ${ROOT}/servers/bside`]: detail({
+      name: "bside",
+      transport: "http",
+      command: null,
+      args: [],
+      url: "http://host.docker.internal:27433/mcp/agent/maya",
+    }),
+  });
+  await render(pane("bside"));
+  assert.ok($("[data-bside-copy-blocked]"));
+  assert.equal(copyButton().disabled, true);
+});
+
 test("a failed copy call shows an error and no results", async () => {
   mockFetch({
     [`GET ${ROOT}/servers/github`]: detail(),

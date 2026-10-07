@@ -3425,7 +3425,7 @@ const zh: Record<string, string> = {
   "skills.create.submit": "创建",
   "skills.bside.title": "Bside 个人浏览器技能",
   "skills.bside.intro":
-    "安装 DeskOffice 工作指南，让此 NPC 使用固定到其配置文件的 Bside MCP 浏览器。",
+    "为此 NPC 的 Bside 浏览器安装 DeskOffice 工作指南。连接器 → 添加 → Bside 浏览器 → 连接 会一键自动安装；需要重新安装时使用此处。",
   "skills.bside.boundary":
     "连接 NPC 的 Bside 浏览器后再使用。它只使用受限浏览器工具，并保留 Bside 的人工审批边界。",
   "skills.bside.install": "安装 Bside 浏览器技能",
@@ -3689,6 +3689,11 @@ const zh: Record<string, string> = {
   "connectors.error.secret_key_not_referenced": "设置中未使用该密钥名称",
   "connectors.error.bside_profile_not_copyable":
     "Bside 个人浏览器绑定到一个 NPC，不能复制。请使用另一个 Bside 配置文件单独添加它。",
+  "connectors.error.bside_unreachable": "无法连接到 Bside。请启动 Bside 并检查其地址。",
+  "connectors.error.bside_error": "Bside 返回错误：{detail}",
+  "connectors.error.bside_url_invalid": "Bside 地址必须以 http:// 或 https:// 开头",
+  "connectors.error.bside_profile_required": "请选择 Bside 配置文件或输入新配置文件名称",
+  "connectors.error.bside_profile_not_found": "该 Bside 配置文件已不存在，请刷新列表。",
   "connectors.error.invalid_name": "不能使用该名称",
   "connectors.error.timeout": "无响应，已中止",
   "connectors.error.unreachable": "无法连接到服务器",
@@ -3743,16 +3748,30 @@ const zh: Record<string, string> = {
   "connectors.add.tab.bside": "Bside 浏览器",
   "connectors.add.tab.custom": "手动添加",
   "connectors.add.bside.title": "此 NPC 的 Bside 浏览器",
-  "connectors.add.bside.intro": "连接作为此 NPC 专属 PC 和浏览器的 Bside 配置文件。",
+  "connectors.add.bside.intro":
+    "一键为此 NPC 提供专属的 Bside 浏览器配置文件：选择或创建配置文件，添加 bside 连接器，并安装浏览器技能。",
+  "connectors.add.bside.url": "Bside 地址",
+  "connectors.add.bside.urlHint":
+    "DeskRPG 和 Hermes 访问 Bside 的地址。Docker Desktop 下为 http://host.docker.internal:27433。",
+  "connectors.add.bside.retry": "重试",
+  "connectors.add.bside.loadingProfiles": "正在查找 Bside…",
+  "connectors.add.bside.unreachable":
+    "无法连接到 {url} 上的 Bside。请启动 Bside 并检查地址后重试。",
+  "connectors.add.bside.bsideError": "{url} 上的 Bside 返回错误：{detail}",
+  "connectors.add.bside.profile": "Bside 配置文件",
+  "connectors.add.bside.profileNew": "创建新配置文件",
+  "connectors.add.bside.profileHint":
+    "此配置文件将成为该 NPC 专属的浏览器，登录、Cookie 和历史记录都保存在这里。",
+  "connectors.add.bside.newProfileName": "新配置文件名称",
+  "connectors.add.bside.mcpUrl": "MCP 端点",
   "connectors.add.bside.gatewayGuidance":
-    "deskoffice-bside-mcp 在 Hermes 网关主机上运行。该主机必须能够访问 Bside；只有 Bside 也在同一主机上运行时才使用回环地址。",
-  "connectors.add.bside.profileId": "Bside 配置文件 ID",
-  "connectors.add.bside.profileHint": "此配置文件将成为该 NPC 专用的浏览器工作区。",
-  "connectors.add.bside.apiUrl": "Bside API URL（可选）",
-  "connectors.add.bside.apiToken": "Bside API 令牌（可选）",
-  "connectors.add.bside.untrusted": "此连接器以不受信任状态启动，因此可写浏览器工具需要确认。",
-  "connectors.add.bside.add": "添加 Bside 浏览器",
-  "connectors.add.bside.adding": "正在添加 Bside 浏览器…",
+    "Hermes 也通过此地址以 MCP 连接 Bside，因此 Hermes 主机也必须能访问它。在 Linux Docker 上，请将 Bside 的 API 主机设为 0.0.0.0。",
+  "connectors.add.bside.connect": "连接 Bside 浏览器",
+  "connectors.add.bside.connecting": "正在连接 Bside 浏览器…",
+  "connectors.add.bside.connected": "已连接到 Bside 配置文件 {profile}。",
+  "connectors.add.bside.skillFailed":
+    "无法安装浏览器技能（{code}）。请在 技能 → 添加 → Bside 浏览器 中安装。",
+  "connectors.add.bside.continue": "继续",
   "connectors.add.search": "搜索目录",
   "connectors.add.loading": "正在加载目录…",
   "connectors.add.catalogEmpty": "没有匹配的条目",

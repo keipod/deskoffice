@@ -56,7 +56,7 @@ export default function ConnectorCopyPane({
   }, [api, server, t]);
 
   const stdio = detail?.transport === "stdio";
-  const bsidePersonalBrowser = isDeskOfficeBsideBridge(detail?.command, detail?.args);
+  const bsidePersonalBrowser = isDeskOfficeBsideBridge(detail?.command, detail?.args, detail?.url);
   const command = stdio ? [detail.command ?? "", ...detail.args].join(" ").trim() : "";
   const canCopy =
     !!detail && !bsidePersonalBrowser && picked.length > 0 && (!stdio || stdioOk) && !busy;

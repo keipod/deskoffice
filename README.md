@@ -260,29 +260,32 @@ Check the result with `hermes plugins list`: `deskrpg` should be `enabled` at ve
 
 ### Bside browser connector
 
-To give an NPC its own Bside personal PC/browser, open that NPC's **Connectors** tab, choose
-**Manage**, then **Add → Bside browser**. Enter the Bside profile ID. `BSIDE_API_URL` (an optional
-endpoint) and `BSIDE_API_TOKEN` (an optional token) are stored as MCP secrets, never in the
-connector's create request. The preset creates:
+Bside gives each NPC its own personal browser profile (logins, cookies, history) that the NPC drives
+over MCP: reading feeds, comments and analytics, scrolling, typing and uploading media like a person.
+Bside serves a profile-pinned MCP endpoint at `<Bside URL>/mcp/agent/<profile ID>`; DeskRPG does not
+bundle or import Bside.
 
-```text
-command: deskoffice-bside-mcp
-args:    --profile <Bside profile ID>
-trust:   untrusted
-```
+1. Start Bside on the host (its API listens on port `27433`).
+2. Open the NPC's **Connectors** tab, choose **Manage → Add → Bside browser**.
+3. DeskRPG looks up Bside's profiles. Pick one, or keep **Create a new profile** (named after the NPC
+   by default), and press **Connect Bside browser**.
 
-Install the separately deployed `deskoffice-bside-mcp` bridge on the **Hermes gateway host** and
-make sure Bside is reachable from that host. A loopback URL such as `127.0.0.1` works only when
-Bside and Hermes run on the same host. DeskRPG does not bundle or import Bside; this is MCP wiring
-only. The preset begins untrusted, so write-capable browser tools require confirmation.
-Because the Bside profile is that NPC's personal browser workspace, this connector cannot be copied
-to another NPC; create a separate Bside profile and add the preset there instead.
+That one click creates (or reuses) the Bside profile, adds an HTTP connector named `bside` pointing at
+`<Bside URL>/mcp/agent/<profile ID>` (no token, full trust), and installs the
+`deskoffice-bside-browser` skill. Repeating it is safe: an existing Bside connector is repointed and
+an installed skill is left alone. If the skill cannot be installed on this gateway, the connector is
+still added and the pane says so; install the skill later from **Skills → Manage → Add → Bside
+browser**.
 
-Then open the same NPC's **Skills** tab, choose **Manage → Add → Bside browser**, and install
-`deskoffice-bside-browser`. It is a profile-local work playbook for the scoped
-`deskoffice_bside_*` MCP tools: health and tab discovery, snapshot/wait/action loops, and the
-human-approval boundary for sensitive actions. It appears in the NPC's Skills menu as a normal
-enabled skill; use its **Use** button (or a skill chip) when assigning browser work.
+**Reaching Bside.** Both DeskRPG's server (to list profiles) and Hermes (to call the MCP endpoint)
+must reach the Bside URL. The default is `http://host.docker.internal:27433`, which Docker Desktop
+containers resolve to the host. On Linux Docker, the compose files map `host.docker.internal` to the
+host gateway, but Bside must then listen beyond loopback: set Bside's API host to `0.0.0.0`. To use
+another address, set `BSIDE_URL` (in `.env`; `docker-compose.local.yml` passes it to the app) or
+edit the **Bside URL** field in the pane before connecting.
+
+Because the Bside profile is that NPC's personal browser, the connector cannot be copied to another
+NPC; connect each NPC separately so every NPC works in its own profile, side by side.
 
 Now you can hire NPCs. Each NPC is bound to one Hermes profile at hire time, and you can rebind it
 later without firing it.

@@ -15,7 +15,12 @@ import type {
   McpTool,
 } from "@/lib/hermes/plugin-client-types";
 
-import type { ConnectorListView, CopyResult } from "./connector-types";
+import type {
+  BsideConnectResult,
+  BsideProfilesView,
+  ConnectorListView,
+  CopyResult,
+} from "./connector-types";
 
 export class ConnectorsApiError extends Error {
   readonly status: number;
@@ -101,6 +106,14 @@ export function createConnectorsApi(
     reload: () => req<McpReload>("POST", "reload", {}),
     copy: (targetNpcIds: string[], names: string[]) =>
       req<{ results: CopyResult[] }>("POST", "copy", { targetNpcIds, names }),
+    /** Bside as DeskRPG's server reaches it; `baseUrl` overrides the server default. */
+    bsideProfiles: (baseUrl?: string) =>
+      req<BsideProfilesView>(
+        "GET",
+        baseUrl?.trim() ? `bside/profiles?baseUrl=${seg(baseUrl.trim())}` : "bside/profiles",
+      ),
+    bsideConnect: (body: { baseUrl?: string; profileId?: string; createProfileName?: string }) =>
+      req<BsideConnectResult>("POST", "bside/connect", body),
   };
 }
 

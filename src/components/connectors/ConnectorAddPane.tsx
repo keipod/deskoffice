@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Loader2, Plus, X } from "lucide-react";
+import { AlertTriangle, Loader2, Plus, RefreshCw, X } from "lucide-react";
 
 import { SECRET_INPUT_PROPS } from "@/components/hermes/secret-input";
 import type {
@@ -12,8 +12,9 @@ import type {
 import { useT } from "@/lib/i18n";
 
 import { parseMcpJson } from "./connector-json-import";
-import { buildBsideMcpConfig, type BsideMcpPresetValues } from "./bside-mcp-preset";
+import { bsideAgentMcpUrl } from "@/lib/bside-mcp";
 import { connectorErrorText } from "./connector-error-text";
+import type { BsideConnectResult, BsideProfilesView } from "./connector-types";
 import { hasSecretQuery } from "./url-secret-hint";
 import type { ConnectorsApi } from "./connectors-api";
 
@@ -22,6 +23,8 @@ export type ConnectorAddPaneProps = {
   /** Called with the new server's name once it is saved (the manager then selects it, or opens OAuth). */
   onAdded(name: string): void;
   onCancel(): void;
+  /** The NPC's name — the default name for a new Bside profile. */
+  npcName?: string;
 };
 
 type Pair = { key: string; value: string };
@@ -58,11 +61,8 @@ const EMPTY: Form = {
   cwd: "",
 };
 
-const EMPTY_BSIDE: BsideMcpPresetValues = {
-  profileId: "",
-  apiUrl: "",
-  apiToken: "",
-};
+/** The profile picker's value for "create a new Bside profile". */
+const NEW_PROFILE = "__new__";
 
 const lines = (s: string) =>
   s
@@ -113,7 +113,12 @@ function toInput(form: Form): McpServerInput {
  * the server exists, under the key names the server reports, and are cleared from state right
  * away. OAuth servers skip the connection test — the manager opens the sign-in step instead.
  */
-export default function ConnectorAddPane({ api, onAdded, onCancel }: ConnectorAddPaneProps) {
+export default function ConnectorAddPane({
+  api,
+  onAdded,
+  onCancel,
+  npcName = "",
+}: ConnectorAddPaneProps) {
   const t = useT();
   const [tab, setTab] = useState<AddTab>("catalog");
   const [entries, setEntries] = useState<McpCatalogEntry[] | null>(null);
@@ -122,7 +127,13 @@ export default function ConnectorAddPane({ api, onAdded, onCancel }: ConnectorAd
   const [picked, setPicked] = useState<McpCatalogEntry | null>(null);
   const [catalogEnv, setCatalogEnv] = useState<Record<string, string>>({});
   const [form, setForm] = useState<Form>(EMPTY);
-  const [bside, setBside] = useState<BsideMcpPresetValues>(EMPTY_BSIDE);
+  const [bsideUrl, setBsideUrl] = useState("");
+  const [bsideProbe, setBsideProbe] = useState<BsideProfilesView | null>(null);
+  const [bsideLoading, setBsideLoading] = useState(false);
+  const [bsidePick, setBsidePick] = useState(NEW_PROFILE);
+  const [bsideNewName, setBsideNewName] = useState(npcName);
+  const bsideNewNameTouched = useRef(false);
+  const [bsideResult, setBsideResult] = useState<BsideConnectResult | null>(null);
   const [json, setJson] = useState("");
   const [jsonState, setJsonState] = useState<{ ok: boolean; name?: string } | null>(null);
   const [confirming, setConfirming] = useState(false);
@@ -179,34 +190,62 @@ export default function ConnectorAddPane({ api, onAdded, onCancel }: ConnectorAd
     }
   };
 
-  /** The preset is fixed; only the Bside profile and optional bridge settings come from the user. */
-  const installBside = async () => {
-    const config = buildBsideMcpConfig(bside);
+  /** Asks DeskRPG's server which Bside profiles exist (and so whether Bside is reachable at all). */
+  const probeBside = async (override?: string) => {
+    setBsideLoading(true);
+    setError(null);
+    try {
+      const probe = await api.bsideProfiles(override);
+      if (!alive.current) return;
+      setBsideProbe(probe);
+      setBsideUrl((current) => current || probe.baseUrl);
+      // Reuse the profile already named after this NPC; otherwise default to a new one.
+      const wanted = npcName.trim().toLowerCase();
+      const mine = wanted
+        ? probe.profiles?.find(
+            (p) => p.name.trim().toLowerCase() === wanted || p.id.toLowerCase() === wanted,
+          )
+        : undefined;
+      setBsidePick(mine ? mine.id : NEW_PROFILE);
+    } catch (e) {
+      if (alive.current) setError(connectorErrorText(t, e));
+    } finally {
+      if (alive.current) setBsideLoading(false);
+    }
+  };
+
+  /** One click: profile, connector and browser skill, all done by the server. */
+  const connectBside = async () => {
     setBusy(true);
     setError(null);
-    let server: McpServerView;
     try {
-      server = await api.create(config.input);
+      const result = await api.bsideConnect({
+        baseUrl: bsideUrl.trim() || undefined,
+        ...(bsidePick === NEW_PROFILE
+          ? { createProfileName: bsideNewName.trim() }
+          : { profileId: bsidePick }),
+      });
+      if (!alive.current) return;
+      // A skill that did not install is worth reading before the manager moves on.
+      if (result.skill.ok) finish(result.connector);
+      else setBsideResult(result);
     } catch (e) {
-      if (alive.current) {
-        setError(connectorErrorText(t, e));
-        setBusy(false);
-      }
-      return;
+      if (alive.current) setError(connectorErrorText(t, e));
+    } finally {
+      if (alive.current) setBusy(false);
     }
-    // Match the plugin's reported names rather than assuming it accepted every optional env key.
-    const reported = new Set(server.secrets.map((secret) => secret.key));
-    setBside((current) => ({ ...current, apiUrl: "", apiToken: "" }));
-    try {
-      for (const [key, value] of Object.entries(config.secretValues)) {
-        if (reported.has(key)) await api.putSecret(server.name, key, value);
-      }
-    } catch {
-      /* The connector exists; its detail view shows a missing value and can accept it again. */
-    }
-    finish(server);
-    if (alive.current) setBusy(false);
   };
+
+  // The NPC name can arrive after mount; follow it until the user types their own name.
+  useEffect(() => {
+    if (!bsideNewNameTouched.current) setBsideNewName(npcName);
+  }, [npcName]);
+
+  useEffect(() => {
+    if (tab === "bside" && !bsideProbe && !bsideLoading) void probeBside();
+    // Probe once when the tab first opens; the retry button probes again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   const save = async () => {
     const input = toInput(form);
@@ -275,7 +314,10 @@ export default function ConnectorAddPane({ api, onAdded, onCancel }: ConnectorAd
   const formReady =
     form.name.trim() !== "" &&
     (form.transport === "http" ? form.url.trim() !== "" : form.command.trim() !== "");
-  const bsideReady = bside.profileId.trim() !== "";
+  const bsideBase = bsideUrl.trim() || bsideProbe?.baseUrl || "";
+  const bsideProfileId = bsidePick === NEW_PROFILE ? bsideNewName.trim() : bsidePick;
+  const bsideReady =
+    !!bsideProbe?.profiles && bsideBase !== "" && bsideProfileId !== "" && !bsideLoading;
   const requiredMissing =
     picked?.requiredEnv.some((r) => r.required && !catalogEnv[r.name]?.trim()) ?? true;
 
@@ -446,65 +488,143 @@ export default function ConnectorAddPane({ api, onAdded, onCancel }: ConnectorAd
         <h4 className="font-semibold text-text">{t("connectors.add.bside.title")}</h4>
         <p className="mt-0.5 text-xs text-text-muted">{t("connectors.add.bside.intro")}</p>
       </div>
-      <p data-bside-guidance className="rounded bg-surface-raised p-2 text-xs text-text-muted">
-        {t("connectors.add.bside.gatewayGuidance")}
-      </p>
-      <p className="font-mono text-xs text-text-dim">
-        <code data-bside-command>deskoffice-bside-mcp --profile &lt;Bside profile ID&gt;</code>
-      </p>
-      <form
-        className="flex flex-col gap-3"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (bsideReady && !busy) void installBside();
-        }}
-      >
-        <label className="flex flex-col gap-0.5 text-xs text-text-muted">
-          {t("connectors.add.bside.profileId")}
-          <input
-            name="bside-profile-id"
-            value={bside.profileId}
-            autoComplete="off"
-            spellCheck={false}
-            onChange={(e) => setBside((current) => ({ ...current, profileId: e.target.value }))}
-            className={`${inputCls} font-mono`}
-          />
-          <span className="text-text-dim">{t("connectors.add.bside.profileHint")}</span>
-        </label>
-        <label className="flex flex-col gap-0.5 text-xs text-text-muted">
-          {t("connectors.add.bside.apiUrl")}
-          <input
-            name="bside-api-url"
-            value={bside.apiUrl ?? ""}
-            autoComplete="off"
-            spellCheck={false}
-            placeholder="https://…"
-            onChange={(e) => setBside((current) => ({ ...current, apiUrl: e.target.value }))}
-            className={inputCls}
-          />
-          <span className="font-mono text-text-dim">BSIDE_API_URL</span>
-        </label>
-        <label className="flex flex-col gap-0.5 text-xs text-text-muted">
-          {t("connectors.add.bside.apiToken")}
-          <input
-            name="bside-api-token"
-            value={bside.apiToken ?? ""}
-            onChange={(e) => setBside((current) => ({ ...current, apiToken: e.target.value }))}
-            className={inputCls}
-            {...SECRET_INPUT_PROPS}
-          />
-          <span className="font-mono text-text-dim">BSIDE_API_TOKEN</span>
-        </label>
-        <p className="text-xs text-text-muted">{t("connectors.add.bside.untrusted")}</p>
-        <button
-          type="submit"
-          data-action="bside-install"
-          disabled={!bsideReady || busy}
-          className="self-start rounded bg-primary px-3 py-1 text-white disabled:opacity-50"
+      {bsideResult ? (
+        <div data-bside-result className="flex flex-col gap-2 text-xs">
+          <p className="text-success">
+            {t("connectors.add.bside.connected", { profile: bsideResult.profile.name })}
+          </p>
+          <p className="break-all font-mono text-text-dim">{bsideResult.mcpUrl}</p>
+          <p data-bside-skill-warning className="flex items-start gap-1 text-danger">
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            {t("connectors.add.bside.skillFailed", { code: bsideResult.skill.code ?? "" })}
+          </p>
+          <button
+            type="button"
+            data-action="bside-continue"
+            onClick={() => finish(bsideResult.connector)}
+            className="self-start rounded bg-primary px-3 py-1 text-white"
+          >
+            {t("connectors.add.bside.continue")}
+          </button>
+        </div>
+      ) : (
+        <form
+          className="flex flex-col gap-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (bsideReady && !busy) void connectBside();
+          }}
         >
-          {busy ? t("connectors.add.bside.adding") : t("connectors.add.bside.add")}
-        </button>
-      </form>
+          <label className="flex flex-col gap-0.5 text-xs text-text-muted">
+            {t("connectors.add.bside.url")}
+            <span className="flex gap-1">
+              <input
+                name="bside-url"
+                value={bsideUrl}
+                autoComplete="off"
+                spellCheck={false}
+                placeholder="http://host.docker.internal:27433"
+                onChange={(e) => setBsideUrl(e.target.value)}
+                className={`${inputCls} flex-1 font-mono`}
+              />
+              <button
+                type="button"
+                data-action="bside-retry"
+                disabled={bsideLoading}
+                aria-label={t("connectors.add.bside.retry")}
+                title={t("connectors.add.bside.retry")}
+                onClick={() => void probeBside(bsideUrl)}
+                className="rounded px-2 text-text-muted hover:bg-surface-raised disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${bsideLoading ? "animate-spin" : ""}`} />
+              </button>
+            </span>
+            <span className="text-text-dim">{t("connectors.add.bside.urlHint")}</span>
+          </label>
+          {bsideLoading && (
+            <p className="flex items-center gap-1.5 text-xs text-text-muted">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              {t("connectors.add.bside.loadingProfiles")}
+            </p>
+          )}
+          {!bsideLoading && bsideProbe?.error && (
+            <div data-bside-unreachable className="flex flex-col gap-1 text-xs text-danger">
+              <span className="flex items-start gap-1">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                {t(
+                  bsideProbe.error === "bside_unreachable"
+                    ? "connectors.add.bside.unreachable"
+                    : "connectors.add.bside.bsideError",
+                  { url: bsideProbe.baseUrl, detail: bsideProbe.message ?? "" },
+                )}
+              </span>
+              <button
+                type="button"
+                data-action="bside-retry-probe"
+                onClick={() => void probeBside(bsideUrl)}
+                className="self-start text-primary"
+              >
+                {t("connectors.add.bside.retry")}
+              </button>
+            </div>
+          )}
+          {!bsideLoading && bsideProbe?.profiles && (
+            <>
+              <label className="flex flex-col gap-0.5 text-xs text-text-muted">
+                {t("connectors.add.bside.profile")}
+                <select
+                  name="bside-profile"
+                  value={bsidePick}
+                  onChange={(e) => setBsidePick(e.target.value)}
+                  className={inputCls}
+                >
+                  {bsideProbe.profiles.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name === p.id ? p.name : `${p.name} (${p.id})`}
+                    </option>
+                  ))}
+                  <option value={NEW_PROFILE}>{t("connectors.add.bside.profileNew")}</option>
+                </select>
+                <span className="text-text-dim">{t("connectors.add.bside.profileHint")}</span>
+              </label>
+              {bsidePick === NEW_PROFILE && (
+                <label className="flex flex-col gap-0.5 text-xs text-text-muted">
+                  {t("connectors.add.bside.newProfileName")}
+                  <input
+                    name="bside-new-profile-name"
+                    value={bsideNewName}
+                    autoComplete="off"
+                    onChange={(e) => {
+                      bsideNewNameTouched.current = true;
+                      setBsideNewName(e.target.value);
+                    }}
+                    className={inputCls}
+                  />
+                </label>
+              )}
+              {bsidePick !== NEW_PROFILE && bsideBase && (
+                <p className="flex flex-col gap-0.5 text-xs text-text-muted">
+                  {t("connectors.add.bside.mcpUrl")}
+                  <code data-bside-mcp-url className="break-all font-mono text-text-dim">
+                    {bsideAgentMcpUrl(bsideBase, bsidePick)}
+                  </code>
+                </p>
+              )}
+            </>
+          )}
+          <p data-bside-guidance className="rounded bg-surface-raised p-2 text-xs text-text-muted">
+            {t("connectors.add.bside.gatewayGuidance")}
+          </p>
+          <button
+            type="submit"
+            data-action="bside-connect"
+            disabled={!bsideReady || busy}
+            className="self-start rounded bg-primary px-3 py-1 text-white disabled:opacity-50"
+          >
+            {busy ? t("connectors.add.bside.connecting") : t("connectors.add.bside.connect")}
+          </button>
+        </form>
+      )}
     </section>
   );
 

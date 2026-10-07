@@ -1,5 +1,7 @@
 import test, { after, before } from "node:test";
 import assert from "node:assert/strict";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { NextRequest } from "next/server";
 
 import {
@@ -88,8 +90,9 @@ function call(
   npcId: string,
   path: string[],
   body?: unknown,
+  query = "",
 ) {
-  const url = `http://localhost/api/channels/${channelId}/npcs/${npcId}/connectors/${path.map(encodeURIComponent).join("/")}`;
+  const url = `http://localhost/api/channels/${channelId}/npcs/${npcId}/connectors/${path.map(encodeURIComponent).join("/")}${query}`;
   const req = new NextRequest(url, {
     method,
     headers: new Headers(authHeaders(userId)),
@@ -345,4 +348,270 @@ test("responses never contain the profile key", async () => {
     await call(s.owner.id, "GET", s.channel.id, s.npc.id, ["servers", "github"])
   ).text();
   assert.ok(!text.includes("profile-key-1234567890"));
+});
+
+/** A stand-in for Bside's REST: `GET/POST /profiles`, recording whether an Origin header arrived. */
+async function startFakeBside() {
+  const profiles: { id: string; name: string; storagePath: string }[] = [
+    { id: "sophie", name: "Sophie", storagePath: "/data/sophie" },
+  ];
+  const origins: (string | undefined)[] = [];
+  let creates = 0;
+  const server: Server = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (c) => (raw += c));
+    req.on("end", () => {
+      origins.push(req.headers.origin);
+      res.setHeader("content-type", "application/json");
+      if (req.url === "/profiles" && req.method === "GET") return res.end(JSON.stringify(profiles));
+      if (req.url === "/profiles" && req.method === "POST") {
+        creates += 1;
+        const name = String(JSON.parse(raw).name);
+        const p = { id: name.toLowerCase().replace(/[^a-z0-9]+/g, "-"), name, storagePath: "/x" };
+        profiles.push(p);
+        return res.end(JSON.stringify(p));
+      }
+      res.statusCode = 404;
+      res.end(JSON.stringify({ message: "not found" }));
+    });
+  });
+  await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  return { url, origins, creates: () => creates, close: () => server.close() };
+}
+
+test("bside/profiles lists Bside profiles, or reports Bside unreachable", async () => {
+  const s = await seed();
+  const bside = await startFakeBside();
+  try {
+    const q = `?baseUrl=${encodeURIComponent(bside.url + "/")}`;
+    const res = await call(
+      s.owner.id,
+      "GET",
+      s.channel.id,
+      s.npc.id,
+      ["bside", "profiles"],
+      undefined,
+      q,
+    );
+    assert.equal(res.status, 200);
+    assert.deepEqual(await res.json(), {
+      baseUrl: bside.url,
+      profiles: [{ id: "sophie", name: "Sophie" }],
+    });
+    assert.ok(bside.origins.every((o) => o === undefined));
+  } finally {
+    bside.close();
+  }
+  const down = await call(
+    s.owner.id,
+    "GET",
+    s.channel.id,
+    s.npc.id,
+    ["bside", "profiles"],
+    undefined,
+    "?baseUrl=http%3A%2F%2F127.0.0.1%3A1",
+  );
+  assert.equal(down.status, 200);
+  const body = await down.json();
+  assert.equal(body.error, "bside_unreachable");
+  assert.equal(body.baseUrl, "http://127.0.0.1:1");
+  const bad = await call(
+    s.owner.id,
+    "GET",
+    s.channel.id,
+    s.npc.id,
+    ["bside", "profiles"],
+    undefined,
+    "?baseUrl=ftp%3A%2F%2Fx",
+  );
+  assert.equal(bad.status, 400);
+  assert.equal((await bad.json()).code, "bside_url_invalid");
+});
+
+test("bside routes are gateway-owner only", async () => {
+  const s = await seed();
+  for (const [method, path, body] of [
+    ["GET", ["bside", "profiles"], undefined],
+    ["POST", ["bside", "connect"], {}],
+  ] as const) {
+    const res = await call(s.member.id, method, s.channel.id, s.npc.id, [...path], body);
+    assert.equal(res.status, 403, `${method} ${path.join("/")}`);
+  }
+});
+
+test("bside/connect creates the profile, the HTTP connector, and the skill; repeating is a no-op", async () => {
+  const s = await seed();
+  const bside = await startFakeBside();
+  const mcp = server.mcp("sophie");
+  try {
+    const res = await call(s.owner.id, "POST", s.channel.id, s.npc.id, ["bside", "connect"], {
+      baseUrl: bside.url,
+      createProfileName: "Sophie Desk",
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    const mcpUrl = `${bside.url}/mcp/agent/sophie-desk`;
+    assert.deepEqual(body.profile, { id: "sophie-desk", name: "Sophie Desk" });
+    assert.equal(body.mcpUrl, mcpUrl);
+    assert.equal(body.alreadyConnected, false);
+    assert.equal(body.connector.name, "bside");
+    assert.deepEqual(body.skill, { ok: true });
+    assert.deepEqual(mcp.lastCreateBody, {
+      name: "bside",
+      transport: "http",
+      url: mcpUrl,
+      auth: "none",
+      trust: "full",
+    });
+    assert.ok(server.skills("sophie").skills.has("deskoffice-bside-browser"));
+
+    const again = await (
+      await call(s.owner.id, "POST", s.channel.id, s.npc.id, ["bside", "connect"], {
+        baseUrl: bside.url,
+        createProfileName: "sophie desk",
+      })
+    ).json();
+    assert.equal(bside.creates(), 1);
+    assert.equal(again.alreadyConnected, true);
+    assert.deepEqual(again.skill, { ok: true, alreadyInstalled: true });
+    assert.ok(bside.origins.every((o) => o === undefined));
+  } finally {
+    bside.close();
+  }
+});
+
+test("bside/connect repoints an older Bside connector and refuses an unrelated `bside` server", async () => {
+  const s = await seed();
+  const bside = await startFakeBside();
+  try {
+    server.mcp("sophie").seed("bside", {
+      entry: { url: "http://old-host:27433/mcp/agent/old" },
+    });
+    const res = await call(s.owner.id, "POST", s.channel.id, s.npc.id, ["bside", "connect"], {
+      baseUrl: bside.url,
+      profileId: "sophie",
+    });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).alreadyConnected, false);
+    assert.equal(
+      server.mcp("sophie").servers.get("bside")!.entry.url,
+      `${bside.url}/mcp/agent/sophie`,
+    );
+
+    server.mcp("max").seed("bside", { entry: { url: "https://unrelated.example/mcp" } });
+    const taken = await call(s.owner.id, "POST", s.channel.id, s.npc2.id, ["bside", "connect"], {
+      baseUrl: bside.url,
+      profileId: "sophie",
+    });
+    assert.equal(taken.status, 409);
+    assert.equal((await taken.json()).code, "name_taken");
+    assert.equal(
+      server.mcp("max").servers.get("bside")!.entry.url,
+      "https://unrelated.example/mcp",
+    );
+
+    const missing = await call(s.owner.id, "POST", s.channel.id, s.npc.id, ["bside", "connect"], {
+      baseUrl: bside.url,
+      profileId: "nobody",
+    });
+    assert.equal(missing.status, 404);
+    assert.equal((await missing.json()).code, "bside_profile_not_found");
+  } finally {
+    bside.close();
+  }
+  const down = await call(s.owner.id, "POST", s.channel.id, s.npc.id, ["bside", "connect"], {
+    baseUrl: "http://127.0.0.1:1",
+    profileId: "sophie",
+  });
+  assert.equal(down.status, 502);
+  assert.equal((await down.json()).code, "bside_unreachable");
+});
+
+test("copy refuses a Bside agent HTTP connector too", async () => {
+  const s = await seed();
+  server.mcp("sophie").seed("bside-http", {
+    entry: { url: "http://host.docker.internal:27433/mcp/agent/sophie" },
+  });
+  const res = await call(s.owner.id, "POST", s.channel.id, s.npc.id, ["copy"], {
+    targetNpcIds: [s.npc2.id],
+    names: ["bside-http"],
+  });
+  assert.deepEqual((await res.json()).results, [
+    { npcId: s.npc2.id, name: "bside-http", ok: false, code: "bside_profile_not_copyable" },
+  ]);
+});
+
+test("bside/connect still creates the connector when the gateway cannot edit skills", async () => {
+  const withoutSkillAdmin = FULL_INFO.capabilities.filter((c) => c !== "profile_skill_admin");
+  for (const [capabilities, code] of [
+    [withoutSkillAdmin, "plugin_upgrade_required"],
+    [[...withoutSkillAdmin, "profile_skill_read"], "skill_feature_unavailable"],
+  ] as const) {
+    // Binding caches the plugin info, so the reduced capabilities must be in place before seeding.
+    server.setInfo({ ...FULL_INFO, capabilities: [...capabilities] });
+    let s;
+    try {
+      s = await seed();
+    } finally {
+      server.setInfo(FULL_INFO);
+    }
+    const bside = await startFakeBside();
+    try {
+      server.mcp("sophie").servers.delete("bside");
+      const res = await call(s.owner.id, "POST", s.channel.id, s.npc.id, ["bside", "connect"], {
+        baseUrl: bside.url,
+        profileId: "sophie",
+      });
+      assert.equal(res.status, 200, code);
+      const body = await res.json();
+      assert.deepEqual(body.skill, { ok: false, code });
+      assert.equal(body.connector.name, "bside");
+      assert.equal(
+        server.mcp("sophie").servers.get("bside")!.entry.url,
+        `${bside.url}/mcp/agent/sophie`,
+      );
+    } finally {
+      bside.close();
+    }
+  }
+});
+
+test("bside/connect reports the plugin's skill create failure code", async () => {
+  const s = await seed();
+  const bside = await startFakeBside();
+  const skills = server.skills("sophie");
+  try {
+    server.mcp("sophie").servers.delete("bside");
+    // The skill exists but the list call fails, so the create runs and the plugin rejects it.
+    skills.seed("deskoffice-bside-browser");
+    server.failNext("/p/sophie/deskrpg/skills", 1);
+    const res = await call(s.owner.id, "POST", s.channel.id, s.npc.id, ["bside", "connect"], {
+      baseUrl: bside.url,
+      profileId: "sophie",
+    });
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.deepEqual(body.skill, { ok: false, code: "skill_write_rejected" });
+    assert.equal(body.connector.name, "bside");
+  } finally {
+    skills.skills.delete("deskoffice-bside-browser");
+    bside.close();
+  }
+});
+
+test("bside/connect needs a profile id or a new profile name", async () => {
+  const s = await seed();
+  const bside = await startFakeBside();
+  try {
+    const res = await call(s.owner.id, "POST", s.channel.id, s.npc.id, ["bside", "connect"], {
+      baseUrl: bside.url,
+      profileId: "  ",
+    });
+    assert.equal(res.status, 400);
+    assert.equal((await res.json()).code, "bside_profile_required");
+    assert.equal(bside.origins.length, 0);
+  } finally {
+    bside.close();
+  }
 });
