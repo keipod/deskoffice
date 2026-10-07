@@ -1,7 +1,26 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { isUuid } from "./uuid";
+import { createClientUuid, isUuid } from "./uuid";
+
+test("client UUIDs work on LAN HTTP where randomUUID is unavailable", (t) => {
+  const fill = t.mock.fn((bytes: Uint8Array) => bytes.fill(255));
+  t.mock.method(globalThis, "crypto", () => ({ getRandomValues: fill }), { getter: true });
+
+  const id = createClientUuid();
+
+  assert.equal(id, "ffffffff-ffff-4fff-bfff-ffffffffffff");
+  assert.equal(isUuid(id), true);
+  assert.equal(fill.mock.callCount(), 1);
+});
+
+test("client UUIDs use native randomUUID when available", (t) => {
+  const expected = "0192f3a4-5b6c-4d8e-9f01-23456789abcd";
+  const native = t.mock.method(crypto, "randomUUID", () => expected);
+
+  assert.equal(createClientUuid(), expected);
+  assert.equal(native.mock.callCount(), 1);
+});
 
 test("isUuid accepts the canonical form in either case", () => {
   assert.equal(isUuid("0192f3a4-5b6c-7d8e-9f01-23456789abcd"), true);

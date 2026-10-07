@@ -98,6 +98,7 @@ import ReportBadge from "@/components/report/ReportBadge";
 import ChatPanel from "@/components/ChatPanel";
 import type { NpcTabRequest, SkillChipRequest } from "@/components/chat/npc-tab-state";
 import { formatSkillChipLine } from "@/lib/chat/skill-chips";
+import { createClientUuid } from "@/lib/uuid";
 import ConversationPane from "@/components/conversation/ConversationPane";
 import ConversationWorkspace from "@/components/conversation/ConversationWorkspace";
 import MeetingWorkspace from "@/components/conversation/MeetingWorkspace";
@@ -1637,7 +1638,7 @@ function GamePageInner({ onFatal }: GamePageClientProps) {
         files && files.length > 0
           ? `${sentLine}\n📎 ${files.map((f) => f.name).join(", ")}`
           : sentLine;
-      const sourceMessageId = crypto.randomUUID();
+      const sourceMessageId = createClientUuid();
       setNpcMessages((prev) => [
         ...prev,
         { id: sourceMessageId, role: "player", content: displayMessage },
@@ -1768,7 +1769,7 @@ function GamePageInner({ onFatal }: GamePageClientProps) {
     (name: string, npcIds: string[], userIds: string[]) => {
       if (!socket || !socket.connected || !channelId) return;
       // When the server returns `room:created`, this ticket is the only basis for telling "the one I created".
-      const requestId = crypto.randomUUID();
+      const requestId = createClientUuid();
       pendingCreateRef.current = requestId;
       socket.emit("room:create", { channelId, name, npcIds, userIds, requestId });
     },
