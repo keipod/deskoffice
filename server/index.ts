@@ -1,4 +1,6 @@
 import Fastify from "fastify";
+import { authenticateRequest, assertSafeBinding } from "./security.js";
+import { getBotScreenStatus, controlBotScreen } from "./bot-screens.js";
 import fastifyStatic from "@fastify/static";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -59,10 +61,12 @@ import {
 import { dispatchTask, reviewTask, runMeetingTurn, summarizeMeeting } from "./workflows.js";
 
 const port = Number(process.env.DESKOFFICE_PORT ?? 32180);
-const host = process.env.DESKOFFICE_HOST ?? "0.0.0.0";
+const host = process.env.DESKOFFICE_HOST ?? "127.0.0.1";
+assertSafeBinding(host, process.env.DESKOFFICE_BASIC_PASSWORD);
 const dev = process.env.DESKOFFICE_DEV === "1";
 
 const app = Fastify({ logger: true });
+app.addHook("onRequest", authenticateRequest);
 const eventClients = new Set<ServerResponse>();
 
 function emit(type: string, payload: unknown) {
@@ -244,6 +248,34 @@ app.get("/api/bside/profiles", async (_request, reply) => {
     });
   }
 });
+
+// Native Hermes Bot Screen controls. Every action is executed by the official CLI
+// against a registered profile, not a DeskOffice surrogate desktop.
+app.get("/api/hermes/screens", async () => {
+  const profiles = listHermesProfiles();
+  return { screens: await Promise.all(profiles.map(async (profile) => ({
+    profileId: profile.id,
+    profileName: profile.profileName,
+    displayName: profile.displayName,
+    connected: profile.status === "valid",
+    boundAgentId: profile.boundAgentId,
+    ...await getBotScreenStatus(profile.profileName)
+  }))) };
+});
+
+app.post<{ Params: { id: string }; Body: { operation?: "start" | "stop" } }>(
+  "/api/hermes/screens/:id/control", async (request, reply) => {
+    const profile = getHermesProfile(request.params.id);
+    if (!profile) return reply.code(404).send({ error: "hermes_profile_not_found" });
+    const operation = request.body?.operation;
+    if (operation !== "start" && operation !== "stop") {
+      return reply.code(400).send({ error: "operation_must_be_start_or_stop" });
+    }
+    const status = await controlBotScreen(profile.profileName, operation);
+    emit("hermes", { reason: "bot_screen", profileId: profile.id });
+    return reply.code(status.ok ? 200 : 409).send(status);
+  }
+);
 
 // Hermes profile registry: one managed Hermes identity can be bound to at most one DeskOffice employee.
 app.get("/api/hermes/profiles", async () => ({ profiles: listHermesProfiles() }));

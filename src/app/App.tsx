@@ -15,6 +15,7 @@ import WorkspacePage from "./WorkspacePage";
 import KanbanPage from "./KanbanPage";
 import CronPage from "./CronPage";
 import MeetingsPage from "./MeetingsPage";
+import BotScreensPage from "./BotScreensPage";
 import PeoplePage from "./PeoplePage";
 
 type Health = {
@@ -33,7 +34,7 @@ type Health = {
 };
 
 type BsideProfile = { id: string; name?: string };
-type View = "office" | "people" | "kanban" | "meetings" | "cron";
+type View = "office" | "screens" | "people" | "kanban" | "meetings" | "cron";
 
 const specialties: Specialty[] = [
   "executive",
@@ -130,7 +131,7 @@ function AgentEditor({
     specialty: initial?.specialty ?? "researcher",
     seniority: initial?.seniority ?? "mid",
     managerId: initial?.managerId ?? null,
-    executor: initial?.executor ?? "opencode",
+    executor: initial?.executor ?? "hermes",
     bsideProfileId: initial?.bsideProfileId ?? null,
     hermesProfileId: initial?.hermesProfileId ?? null,
     workspaceSlug: initial?.workspaceSlug ?? "researcher",
@@ -426,6 +427,7 @@ export default function App() {
 
   const nav: Array<{ id: View; label: string }> = [
     { id: "office", label: "Office" },
+    { id: "screens", label: "Bot Screens" },
     { id: "people", label: "People" },
     { id: "kanban", label: "Kanban" },
     { id: "meetings", label: "Meetings" },
@@ -611,6 +613,7 @@ export default function App() {
 
                 <div className="section-divider" />
                 <div className="button-stack">
+                  <button className="primary-button" onClick={() => setView("screens")}>직원 Bot Screen 보기</button>
                   <button
                     className="secondary-button"
                     onClick={() => {
@@ -631,6 +634,7 @@ export default function App() {
         </div>
       )}
 
+      {view === "screens" && <BotScreensPage agents={agents} profiles={hermesProfiles} selectedAgentId={selectedId} />}
       {view === "people" && (
         <PeoplePage
           agents={agents}

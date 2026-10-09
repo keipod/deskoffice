@@ -75,9 +75,9 @@ export default function MeetingsPage({ agents }: { agents: Agent[] }) {
     <section className="work-page">
       <div className="work-page-head">
         <div>
-          <span className="eyebrow">MEETING MODE</span>
+          <span className="eyebrow">DESKOFFICE MEETINGS · LEGACY COORDINATOR</span>
           <h1>Meetings</h1>
-          <p>참석자는 일반 채팅이 아니라 회의 모드로 발언합니다. 최근 발언을 읽고 중복을 피하면서 결론으로 수렴합니다.</p>
+          <p>참석자는 일반 채팅이 아니라 DeskOffice의 기존 순차 발언 회의입니다. Hermes 원본 Desktop 그룹 회의와는 별도 기능이며, 실제 Hermes 프로필에 연결된 참가자만 Hermes 엔진으로 발언합니다.</p>
         </div>
       </div>
 
